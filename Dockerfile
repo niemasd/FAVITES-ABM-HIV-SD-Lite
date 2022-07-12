@@ -7,6 +7,7 @@ RUN apt-get update && apt-get -y upgrade && \
 
     # Install required Python packages
     pip3 install openpyxl && \
+    pip3 install treeswift && \
 
     # Install required R packages
     R -e "install.packages('gtools')" && \
