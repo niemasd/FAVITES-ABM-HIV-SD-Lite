@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime
 from os import chdir, getcwd, makedirs
-from os.path import isdir, isfile
+from os.path import abspath, expanduser, isdir, isfile
 from subprocess import check_output
 from sys import argv, stdout
 import argparse
@@ -13,6 +13,8 @@ LOGFILE = None
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
 DEFAULT_PATH_ABM_HIV_MODULES = "/usr/local/bin/abm_hiv-HRSA_SD/modules"
+DEFAULT_FN_ABM_HIV_LOG = "log_abm_hiv.txt"
+DEFAULT_FN_LOG = "log_favites.txt"
 
 # check if user is just printing version
 if '--version' in argv:
@@ -31,10 +33,20 @@ def print_log(s='', end='\n'):
 
 # run abm_hiv-HRSA_SD
 def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time, path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES):
+    # run the R script
     command = ['Rscript', path_abm_hiv_commandline, path_abm_hiv_modules, abm_hiv_params_xlsx, str(abm_hiv_trans_start), str(abm_hiv_trans_end), str(abm_hiv_trans_time)]
-    print_log("abm_hiv-HRSA-SD Command: %s" % ' '.join(command))
-    abm_out = check_output(command).decode()
-    f = open('%s/abm.txt' % outdir, 'w'); f.write(abm_out); f.close() # TODO REPLACE WITH PROPER PARSING
+    print_log("abm_hiv-HRSA_SD Command: %s" % ' '.join(command))
+    log_f = open('%s/%s' % (outdir,DEFAULT_FN_ABM_HIV_LOG), 'w')
+    abm_out = check_output(command, stderr=log_f).decode(); log_f.flush()
+
+    # separate the output
+    log_text, abm_out = abm_out.split('[1] "Calibration metrics..."')
+    log_f.write(log_text); log_f.close()
+    calibration_data, abm_out = abm_out.strip().split('[1] "Transmission tree..."')
+    transmission_data, times_data = abm_out.strip().split('[1] "Sequence sample times..."')
+
+    # parse the calibration data and write to file
+    print(calibration_data); exit() # TODO
 
 # parse user args
 def parse_args():
@@ -56,10 +68,11 @@ if __name__ == "__main__":
     args = parse_args()
     if isdir(args.output) or isfile(args.output):
         raise ValueError("Output directory exists: %s" % args.output)
+    args.output = abspath(expanduser(args.output))
 
     # set up output directory
     makedirs(args.output, exist_ok=True)
-    LOGFILE_fn = "%s/log.txt" % args.output
+    LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
     LOGFILE = open(LOGFILE_fn, 'w')
 
     # print run info to log
