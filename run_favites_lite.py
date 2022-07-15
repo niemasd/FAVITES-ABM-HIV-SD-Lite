@@ -13,6 +13,7 @@ LOGFILE = None
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
 DEFAULT_PATH_ABM_HIV_MODULES = "/usr/local/bin/abm_hiv-HRSA_SD/modules"
+DEFAULT_FN_ABM_HIV_CALIBORATION = "abm_hiv_calibration_data.tsv"
 DEFAULT_FN_ABM_HIV_LOG = "log_abm_hiv.txt"
 DEFAULT_FN_LOG = "log_favites.txt"
 
@@ -46,7 +47,12 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
     transmission_data, times_data = abm_out.strip().split('[1] "Sequence sample times..."')
 
     # parse the calibration data and write to file
-    print(calibration_data); exit() # TODO
+    calibration_data = [[v.strip() for v in l.strip().split()] for l in calibration_data.strip().splitlines()[1:]]
+    f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBORATION), 'w')
+    f.write('\t'.join('%s %s' % (calibration_data[0][i], calibration_data[1][i]) for i in range(len(calibration_data[0]))) + '\n')
+    for row in calibration_data[2:]:
+        f.write('\t'.join(row[1:]) + '\n')
+    f.close()
 
 # parse user args
 def parse_args():
