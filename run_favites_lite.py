@@ -14,6 +14,7 @@ LOGFILE = None
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
 DEFAULT_PATH_ABM_HIV_MODULES = "/usr/local/bin/abm_hiv-HRSA_SD/modules"
 DEFAULT_FN_ABM_HIV_CALIBRATION = "abm_hiv_calibration_data.tsv"
+DEFAULT_FN_ABM_HIV_DEMOGRAPHICS = "abm_hiv_demographic_data.tsv"
 DEFAULT_FN_ABM_HIV_LOG = "log_abm_hiv.txt"
 DEFAULT_FN_ABM_HIV_TIMES = "abm_hiv_times.tsv"
 DEFAULT_FN_LOG = "log_favites.txt"
@@ -45,28 +46,33 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
     log_text, abm_out = abm_out.split('[1] "Calibration metrics..."')
     log_f.write(log_text); log_f.close()
     calibration_data, abm_out = abm_out.strip().split('[1] "Transmission tree..."')
-    transmission_data, times_data = abm_out.strip().split('[1] "Sequence sample times..."')
+    transmission_data, abm_out = abm_out.strip().split('[1] "Sequence sample times..."')
+    times_data, demographic_data = abm_out.strip().split('[1] "PLWH demographics..."')
 
     # parse the calibration data and write to file
-    calibration_data = [[v.strip() for v in l.strip().split()] for l in calibration_data.strip().splitlines()[1:]]
+    calibration_data = [[v.strip() for v in l.strip().split()] for l in calibration_data.strip().splitlines()]
     f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBRATION), 'w')
-    f.write('\t'.join(calibration_data[0]) + '\n')
-    for row in calibration_data[2:]:
-        f.write('\t'.join(row[1:]) + '\n')
+    for row in calibration_data:
+        f.write('\t'.join(row) + '\n')
     f.close()
 
     # parse the transmission data and write to file
     f = open('%s/error_free_files/transmission_network.txt' % outdir, 'w')
-    for l in transmission_data.strip().splitlines()[3:]:
-        f.write('\t'.join(v.strip() for v in l.strip().split()[1:]) + '\n')
+    for l in transmission_data.strip().splitlines()[1:]:
+        f.write('\t'.join(v.strip() for v in l.strip().split()) + '\n')
     f.close()
 
     # parse the times data and write to file
-    times_data = [[v.strip() for v in l.strip().split()] for l in times_data.strip().splitlines()[1:]]
+    times_data = [[v.strip() for v in l.strip().split()] for l in times_data.strip().splitlines()]
     f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_TIMES), 'w')
-    f.write('\t'.join(times_data[0]) + '\n')
-    for row in times_data[2:]:
-        f.write('\t'.join(row[1:]) + '\n')
+    for row in times_data:
+        f.write('\t'.join(row) + '\n')
+    f.close()
+
+    # parse the demographic data and write to file
+    f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_DEMOGRAPHICS), 'w')
+    for l in demographic_data.strip().splitlines():
+        f.write('\t'.join(v.strip() for v in l.strip().split()) + '\n')
     f.close()
 
 # parse user args
