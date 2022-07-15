@@ -13,8 +13,9 @@ LOGFILE = None
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
 DEFAULT_PATH_ABM_HIV_MODULES = "/usr/local/bin/abm_hiv-HRSA_SD/modules"
-DEFAULT_FN_ABM_HIV_CALIBORATION = "abm_hiv_calibration_data.tsv"
+DEFAULT_FN_ABM_HIV_CALIBRATION = "abm_hiv_calibration_data.tsv"
 DEFAULT_FN_ABM_HIV_LOG = "log_abm_hiv.txt"
+DEFAULT_FN_ABM_HIV_TIMES = "abm_hiv_times.tsv"
 DEFAULT_FN_LOG = "log_favites.txt"
 
 # check if user is just printing version
@@ -48,9 +49,23 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
 
     # parse the calibration data and write to file
     calibration_data = [[v.strip() for v in l.strip().split()] for l in calibration_data.strip().splitlines()[1:]]
-    f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBORATION), 'w')
-    f.write('\t'.join('%s %s' % (calibration_data[0][i], calibration_data[1][i]) for i in range(len(calibration_data[0]))) + '\n')
+    f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBRATION), 'w')
+    f.write('\t'.join(calibration_data[0]) + '\n')
     for row in calibration_data[2:]:
+        f.write('\t'.join(row[1:]) + '\n')
+    f.close()
+
+    # parse the transmission data and write to file
+    f = open('%s/error_free_files/transmission_network.txt' % outdir, 'w')
+    for l in transmission_data.strip().splitlines()[3:]:
+        f.write('\t'.join(v.strip() for v in l.strip().split()[1:]) + '\n')
+    f.close()
+
+    # parse the times data and write to file
+    times_data = [[v.strip() for v in l.strip().split()] for l in times_data.strip().splitlines()[1:]]
+    f = open('%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_TIMES), 'w')
+    f.write('\t'.join(times_data[0]) + '\n')
+    for row in times_data[2:]:
         f.write('\t'.join(row[1:]) + '\n')
     f.close()
 
@@ -78,6 +93,7 @@ if __name__ == "__main__":
 
     # set up output directory
     makedirs(args.output, exist_ok=True)
+    makedirs('%s/error_free_files' % args.output, exist_ok=True)
     LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
     LOGFILE = open(LOGFILE_fn, 'w')
 
