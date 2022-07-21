@@ -9,6 +9,7 @@ import argparse
 # useful constants
 VERSION = '0.0.1'
 LOGFILE = None
+SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'agerange', 'race', 'timetype', 'probability']
 
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
@@ -56,43 +57,46 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
     if verbose:
         print_log("Parsing calibration data...")
     calibration_data = [[v.strip() for v in l.strip().split()] for l in calibration_data.strip().splitlines()]
-    fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBRATION); f = open(fn, 'w')
+    calibration_fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_CALIBRATION); f = open(calibration_fn, 'w')
     for row in calibration_data:
         f.write('\t'.join(row) + '\n')
     f.close()
     if verbose:
-        print_log("Calibration data written to: %s" % fn)
+        print_log("Calibration data written to: %s" % calibration_fn)
 
     # parse the transmission data and write to file
     if verbose:
         print_log("Parsing transmission network...")
-    fn = '%s/error_free_files/transmission_network.txt' % outdir; f = open(fn, 'w')
+    transmission_fn = '%s/error_free_files/transmission_network.txt' % outdir; f = open(transmission_fn, 'w')
     for l in transmission_data.strip().splitlines()[1:]:
         f.write('\t'.join(v.strip() for v in l.strip().split()) + '\n')
     f.close()
     if verbose:
-        print_log("Transmission network written to: %s" % fn)
+        print_log("Transmission network written to: %s" % transmission_fn)
 
     # parse the times data and write to file
     if verbose:
         print_log("Parsing all event times...")
     times_data = [[v.strip() for v in l.strip().split()] for l in times_data.strip().splitlines()]
-    fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_TIMES); f = open(fn, 'w')
+    all_times_fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_TIMES); f = open(all_times_fn, 'w')
     for row in times_data:
         f.write('\t'.join(row) + '\n')
     f.close()
     if verbose:
-        print_log("All event times written to: %s" % fn)
+        print_log("All event times written to: %s" % all_times_fn)
 
     # parse the demographic data and write to file
     if verbose:
         print_log("Parsing demographic data...")
-    fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_DEMOGRAPHICS); f = open(fn, 'w')
+    demographic_fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_DEMOGRAPHICS); f = open(demographic_fn, 'w')
     for l in demographic_data.strip().splitlines():
         f.write('\t'.join(v.strip() for v in l.strip().split()) + '\n')
     f.close()
     if verbose:
-        print_log("Demographic data written to: %s" % fn)
+        print_log("Demographic data written to: %s" % demographic_fn)
+
+    # return output filenames
+    return calibration_fn, transmission_fn, all_times_fn, demographic_fn
 
 # parse user args
 def parse_args():
@@ -153,8 +157,28 @@ def check_args(args):
         raise ValueError("abm_hiv-HRSA_SD/modules not found: %s" % args.path_abm_hiv_modules)
 
 # load abm_hiv-HRSA_SD sample time probabilities
-def load_sample_time_probs(sample_time_probs_fn):
+def load_sample_time_probs(sample_time_probs_fn, delim=','):
+    probs = dict() # probs[(gender,risk,agerange,race,timetype)] = sampling probability
+    for l_num, l in enumerate(open(sample_time_probs_fn)):
+        parts = [v.strip() for v in l.split(delim)]
+        if l_num == 0: # header
+            if 'probability' not in parts:
+                raise ValueError("Sample time probabilities (CSV) does not have a header called 'probability': %s" % sample_time_probs_fn)
+            rownames = parts; name_to_ind = {rowname:i for i,rowname in enumerate(rownames)}
+            for rowname in SAMPLE_TIME_PROB_COLUMNS:
+                if rowname not in name_to_ind:
+                    raise ValueError("Sample time probabilities (CSV) does not have a header called '%s': %s" % (rowname,sample_time_probs_fn))
+        else:
+            k = tuple(parts[name_to_ind[rowname]] for rowname in SAMPLE_TIME_PROB_COLUMNS[:-1])
+            probs[k] = float(parts[name_to_ind['probability']])
+    return probs
+
+# get sample times from all possible times
+def sample_times_from_all_times(outdir, all_times_fn, probs):
+    sample_times_fn = '%s/error_free_files/sample_times.txt' % outdir; f = open(sample_times_fn, 'w') # TSV file
     exit() # TODO
+    f.close()
+    return sample_times_fn
 
 # main execution
 if __name__ == "__main__":
@@ -183,10 +207,11 @@ if __name__ == "__main__":
     print_log("abm_hiv-HRSA_SD: Starting Transition Rate: %s" % args.abm_hiv_trans_start)
     print_log("abm_hiv-HRSA_SD: Ending Transition Rate: %s" % args.abm_hiv_trans_end)
     print_log("abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate: %s" % args.abm_hiv_trans_time)
-    print_log("Sample Time Probabilities (CSV): %s" % args.sample_time_probs_csv)
+    print_log("Loading Sample Time Probabilities (CSV): %s" % args.sample_time_probs_csv)
+    probs = load_sample_time_probs(args.sample_time_probs_csv)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
-    abm_out = run_abm_hiv_hrsa_sd(
+    calibration_fn, transmission_fn, all_times_fn, demographic_fn = run_abm_hiv_hrsa_sd(
         args.output,                   # FAVITES-ABM-HIV-SD-Lite output directory
         args.abm_hiv_params_xlsx,      # parameter XLSX file
         args.abm_hiv_trans_start,      # starting transition rate
@@ -195,3 +220,5 @@ if __name__ == "__main__":
         args.path_abm_hiv_commandline, # path to abm_hiv-HRSA_SD/abm_hiv_commandline.R script
         args.path_abm_hiv_modules)     # path to abm_hiv-HRSA_SD/modules folder
     print_log()
+    print_log("Determining sample times...")
+    sample_times_fn = sample_times_from_all_times(args.output, all_times_fn, probs)
