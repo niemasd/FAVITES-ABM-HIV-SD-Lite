@@ -2,3 +2,9 @@
 A simplified simulation pipeline specifically for ABM-HIV SD
 
 Assumes that [`abm_hiv-HRSA_SD`](https://github.com/mathematica-pub/abm_hiv/tree/HRSA_SD) is in `/usr/local/bin`, so the [`abm_hiv_commandline.R`](https://github.com/mathematica-pub/abm_hiv/blob/HRSA_SD/abm_hiv_commandline.R) script is located at `/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R` and the [`modules`](https://github.com/mathematica-pub/abm_hiv/tree/HRSA_SD/modules) folder is located at `/usr/local/bin/abm_hiv-HRSA_SD/modules` (but the user can override via command-line arguments).
+
+Example files can be found in [`examples`](examples). Example usage:
+
+```bash
+./run_favites_lite.py -o tmp --abm_hiv_params_xlsx example/data.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv example/time_probs.csv
+```
