@@ -2,6 +2,7 @@
 from datetime import datetime
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
+from random import random
 from subprocess import check_output
 from sys import argv, stdout
 import argparse
@@ -10,6 +11,9 @@ import argparse
 VERSION = '0.0.1'
 LOGFILE = None
 SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'agerange', 'race', 'timetype', 'probability']
+DEMOGRAPHICS_COLUMNS = ['id', 'gender', 'risk', 'age', 'race']
+AGE_RANGES = ['13-24', '25-54', '55-100']
+AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AGE_RANGES]
 
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
@@ -159,24 +163,73 @@ def check_args(args):
 # load abm_hiv-HRSA_SD sample time probabilities
 def load_sample_time_probs(sample_time_probs_fn, delim=','):
     probs = dict() # probs[(gender,risk,agerange,race,timetype)] = sampling probability
-    for l_num, l in enumerate(open(sample_time_probs_fn)):
+    header = True
+    for l in open(sample_time_probs_fn):
         parts = [v.strip() for v in l.split(delim)]
-        if l_num == 0: # header
-            if 'probability' not in parts:
-                raise ValueError("Sample time probabilities (CSV) does not have a header called 'probability': %s" % sample_time_probs_fn)
-            rownames = parts; name_to_ind = {rowname:i for i,rowname in enumerate(rownames)}
-            for rowname in SAMPLE_TIME_PROB_COLUMNS:
-                if rowname not in name_to_ind:
-                    raise ValueError("Sample time probabilities (CSV) does not have a header called '%s': %s" % (rowname,sample_time_probs_fn))
+        if header:
+            header = False
+            colnames = parts; name_to_ind = {colname:i for i,colname in enumerate(colnames)}
+            for colname in SAMPLE_TIME_PROB_COLUMNS:
+                if colname not in name_to_ind:
+                    raise ValueError("Sample time probabilities (CSV) does not have a header called '%s': %s" % (colname,sample_time_probs_fn))
         else:
-            k = tuple(parts[name_to_ind[rowname]] for rowname in SAMPLE_TIME_PROB_COLUMNS[:-1])
+            k = tuple(parts[name_to_ind[colname]] for colname in SAMPLE_TIME_PROB_COLUMNS[:-1]) # [:-1] to skip 'probability'
+            if k in probs:
+                raise ValueError("Duplicate sample time probability encountered in sample time probabilities CSV: %s" % k)
             probs[k] = float(parts[name_to_ind['probability']])
     return probs
 
+# load demographic data
+def load_demographics(demographic_fn, delim='\t'):
+    demographics = dict() # demographics[ID][category] = value
+    header = True
+    for l in open(demographic_fn):
+        parts = [v.strip() for v in l.split(delim)]
+        if header:
+            header = False
+            colnames = parts; name_to_ind = {colname:i for i,colname in enumerate(colnames)}
+            for colname in DEMOGRAPHICS_COLUMNS:
+                if colname not in name_to_ind:
+                    raise ValueError("Demographic data output by abm_hiv-HRSA_SD does not have a column called '%s': %s" % (colname,demographic_fn))
+        else:
+            ID = parts[name_to_ind['id']]
+            if ID in demographics:
+                raise ValueError("Duplicate ID encountered in demographics file: %s" % ID)
+            vals = {colname:parts[name_to_ind[colname]] for colname in DEMOGRAPHICS_COLUMNS[1:]} # [1:] to skip 'id'
+            age = int(float(vals['age'])); agerange = None
+            for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
+                if curr_range[0] <= age <= curr_range[1]:
+                    agerange = AGE_RANGES[ind]; break
+            if agerange is None:
+                raise ValueError("Encountered age outside of valid age ranges: %s" % age)
+            demographics[ID] = { # 'gender', 'risk', 'agerange', 'race'
+                'gender': vals['gender'],
+                'risk': vals['risk'],
+                'race': vals['race'],
+                'agerange': agerange,
+            }
+    return demographics
+
 # get sample times from all possible times
-def sample_times_from_all_times(outdir, all_times_fn, probs):
+def sample_times_from_all_times(outdir, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
+    demographics = load_demographics(demographic_fn, delim=demographic_delim)
     sample_times_fn = '%s/error_free_files/sample_times.txt' % outdir; f = open(sample_times_fn, 'w') # TSV file
-    exit() # TODO
+    header = True
+    for l in open(all_times_fn):
+        if header:
+            header = False
+        else:
+            ID, month, event = [v.strip() for v in l.split(all_times_delim)]
+            if ID not in demographics:
+                raise KeyError("ID not found in demographic data: %s" % ID)
+            demo = demographics[ID]
+            k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-2]] # [:-2] to skip 'timetype' and 'probability
+            k = tuple(k + [event])
+            if k not in probs:
+                raise KeyError("Probability not found: %s" % k)
+            p = probs[k]
+            if random() <= p:
+                f.write("%s\t%s\n" % (ID,p))
     f.close()
     return sample_times_fn
 
@@ -221,4 +274,4 @@ if __name__ == "__main__":
         args.path_abm_hiv_modules)     # path to abm_hiv-HRSA_SD/modules folder
     print_log()
     print_log("Determining sample times...")
-    sample_times_fn = sample_times_from_all_times(args.output, all_times_fn, probs)
+    sample_times_fn = sample_times_from_all_times(args.output, demographic_fn, all_times_fn, probs)
