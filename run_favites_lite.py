@@ -5,6 +5,7 @@ from os.path import abspath, expanduser, isdir, isfile
 from random import random
 from subprocess import check_output
 from sys import argv, stdout
+from treeswift import read_tree_newick
 import argparse
 
 # useful constants
@@ -18,6 +19,7 @@ AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AG
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
 DEFAULT_PATH_ABM_HIV_MODULES = "/usr/local/bin/abm_hiv-HRSA_SD/modules"
+DEFAULT_PATH_COATRAN_CONSTANT = "coatran_constant"
 DEFAULT_FN_ABM_HIV_CALIBRATION = "abm_hiv_calibration_data.tsv"
 DEFAULT_FN_ABM_HIV_DEMOGRAPHICS = "abm_hiv_demographic_data.tsv"
 DEFAULT_FN_ABM_HIV_LOG = "log_abm_hiv.txt"
@@ -115,9 +117,11 @@ def parse_args():
     parser.add_argument('--abm_hiv_trans_end', required=True, type=float, help="amb_hiv-HRSA-SD: Ending Transition Rate")
     parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="amb_hiv-HRSA-SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
+    parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
+    parser.add_argument('--path_coatran_constant', required=False, type=str, default=DEFAULT_PATH_COATRAN_CONSTANT, help="Path to coatran_constant")
     parser.add_argument('--version', action='store_true', help="Display Version")
     args = parser.parse_args()
 
@@ -199,15 +203,7 @@ def load_demographics(demographic_fn, delim='\t'):
             if ID in demographics:
                 raise ValueError("Duplicate ID encountered in demographics file: %s" % ID)
             vals = {colname:parts[name_to_ind[colname]] for colname in DEMOGRAPHICS_COLUMNS[1:]} # [1:] to skip 'id'
-            end_age = int(float(vals['age']))
-            '''
-            agerange = None
-            for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
-                if curr_range[0] <= age <= curr_range[1]:
-                    agerange = AGE_RANGES[ind]; break
-            if agerange is None:
-                raise ValueError("Encountered age outside of valid age ranges: %s" % age)
-            '''
+            end_age = float(vals['age'])
             demographics[ID] = { # 'gender', 'risk', 'agerange', 'race'
                 'gender': vals['gender'],
                 'risk': vals['risk'],
@@ -230,12 +226,13 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
                 raise KeyError("ID not found in demographic data: %s" % ID)
             demo = demographics[ID]
             k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-3]] # [:-2] to skip 'agerange', 'timetype', and 'probability
-            age = demo['end_age'] + month - end_time; agerange = None
+            age = int(demo['end_age'] + ((month - end_time) / 12)) # cast to int to round down
+            agerange = None
             for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
                 if curr_range[0] <= age <= curr_range[1]:
                     agerange = AGE_RANGES[ind]; break
             if agerange is None:
-                raise ValueError("Encountered age outside of valid age ranges: %s" % age)
+                raise ValueError("Encountered age outside of valid age ranges: %s (ID: %s, month: %s, event: %s)" % (age,ID,month,event))
             k = tuple(k + [agerange, event])
             if k not in probs:
                 raise KeyError("Probability not found: %s" % k)
@@ -245,12 +242,27 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
     f.close()
     return sample_times_fn
 
+def run_coatran_constant(outdir, transmission_fn, sample_times_fn, eff_pop_size, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+    command = [path_coatran_constant, transmission_fn, sample_times_fn, str(eff_pop_size)]
+    if verbose:
+        print_log("Running CoaTran (Constant) Command: %s" % ' '.join(command))
+    coatran_stdout = check_output(command)
+    time_trees_fn = '%s/error_free_files/phylogenetic_trees/separate_trees.time.tre' % outdir; f = open(time_trees_fn, 'wb'); f.write(coatran_stdout); f.close()
+    if verbose:
+        print_log("Separate time trees written to: %s" % time_trees_fn)
+        print_log("Loading time trees into TreeSwift...")
+    trees = [read_tree_newick(l) for l in coatran_stdout.decode().splitlines()]
+    if verbose:
+        print_log("Merging time trees into single time tree...")
+    exit() # TODO
+
 # main execution
 if __name__ == "__main__":
     # parse/check user args and set things up
     args = parse_args(); check_args(args)
     makedirs(args.output, exist_ok=True)
     makedirs('%s/error_free_files' % args.output, exist_ok=True)
+    makedirs('%s/error_free_files/phylogenetic_trees' % args.output, exist_ok=True)
     LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
     LOGFILE = open(LOGFILE_fn, 'w')
 
@@ -288,3 +300,11 @@ if __name__ == "__main__":
     print_log("Determining sample times...")
     sample_times_fn = sample_times_from_all_times(args.output, end_time, demographic_fn, all_times_fn, probs)
     print_log("Sample times written to: %s" % sample_times_fn)
+    print_log(); print_log()
+
+    # simulate time and mutation phylogenies
+    print_log("===== PHYLOGENY =====")
+    print_log("=== Time Tree Arguments ===")
+    print_log("Effective Population Size: %s" % args.coatran_eff_pop_size)
+    time_tree_fn = run_coatran_constant(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, DEFAULT_PATH_COATRAN_CONSTANT)
+    print_log("Time tree written to: %s" % time_tree_fn)

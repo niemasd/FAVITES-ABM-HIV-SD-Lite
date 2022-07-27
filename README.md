@@ -6,5 +6,6 @@ Assumes that [`abm_hiv-HRSA_SD`](https://github.com/mathematica-pub/abm_hiv/tree
 Example files can be found in [`examples`](examples). Example usage:
 
 ```bash
-rm -rf tmp && ./run_favites_lite.py -o tmp --abm_hiv_params_xlsx example/data.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv example/time_probs.csv
+rm -rf tmp && ./run_favites_lite.py -o tmp --abm_hiv_params_xlsx example/data.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv example/time_probs.csv --coatran_eff_pop_size 3000
 ```
+* Effective Population Size (~3000) from [Seo *et al*. (Genetics 2002)](https://doi.org/10.1093/genetics/160.4.1283)
