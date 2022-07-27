@@ -6,5 +6,5 @@ Assumes that [`abm_hiv-HRSA_SD`](https://github.com/mathematica-pub/abm_hiv/tree
 Example files can be found in [`examples`](examples). Example usage:
 
 ```bash
-./run_favites_lite.py -o tmp --abm_hiv_params_xlsx example/data.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv example/time_probs.csv
+rm -rf tmp && ./run_favites_lite.py -o tmp --abm_hiv_params_xlsx example/data.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv example/time_probs.csv
 ```

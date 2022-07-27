@@ -10,7 +10,7 @@ import argparse
 # useful constants
 VERSION = '0.0.1'
 LOGFILE = None
-SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'agerange', 'race', 'timetype', 'probability']
+SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'race', 'agerange', 'timetype', 'probability']
 DEMOGRAPHICS_COLUMNS = ['id', 'gender', 'risk', 'age', 'race']
 AGE_RANGES = ['13-24', '25-54', '55-100']
 AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AGE_RANGES]
@@ -56,7 +56,10 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
     calibration_data, abm_out = abm_out.strip().split('[1] "Transmission tree..."')
     transmission_data, abm_out = abm_out.strip().split('[1] "Sequence sample times..."')
     times_data, demographic_data = abm_out.strip().split('[1] "PLWH demographics..."')
-
+    end_time = float(log_text.split('"Month:')[-1].split('"')[0])
+    if verbose:
+        print_log("Simulation end time (months): %s" % end_time)
+    
     # parse the calibration data and write to file
     if verbose:
         print_log("Parsing calibration data...")
@@ -100,7 +103,7 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hi
         print_log("Demographic data written to: %s" % demographic_fn)
 
     # return output filenames
-    return calibration_fn, transmission_fn, all_times_fn, demographic_fn
+    return end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn
 
 # parse user args
 def parse_args():
@@ -196,22 +199,25 @@ def load_demographics(demographic_fn, delim='\t'):
             if ID in demographics:
                 raise ValueError("Duplicate ID encountered in demographics file: %s" % ID)
             vals = {colname:parts[name_to_ind[colname]] for colname in DEMOGRAPHICS_COLUMNS[1:]} # [1:] to skip 'id'
-            age = int(float(vals['age'])); agerange = None
+            end_age = int(float(vals['age']))
+            '''
+            agerange = None
             for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
                 if curr_range[0] <= age <= curr_range[1]:
                     agerange = AGE_RANGES[ind]; break
             if agerange is None:
                 raise ValueError("Encountered age outside of valid age ranges: %s" % age)
+            '''
             demographics[ID] = { # 'gender', 'risk', 'agerange', 'race'
                 'gender': vals['gender'],
                 'risk': vals['risk'],
                 'race': vals['race'],
-                'agerange': agerange,
+                'end_age': end_age,
             }
     return demographics
 
 # get sample times from all possible times
-def sample_times_from_all_times(outdir, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
+def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
     demographics = load_demographics(demographic_fn, delim=demographic_delim)
     sample_times_fn = '%s/error_free_files/sample_times.txt' % outdir; f = open(sample_times_fn, 'w') # TSV file
     header = True
@@ -219,17 +225,23 @@ def sample_times_from_all_times(outdir, demographic_fn, all_times_fn, probs, dem
         if header:
             header = False
         else:
-            ID, month, event = [v.strip() for v in l.split(all_times_delim)]
+            ID, month, event = [v.strip() for v in l.split(all_times_delim)]; month = float(month)
             if ID not in demographics:
                 raise KeyError("ID not found in demographic data: %s" % ID)
             demo = demographics[ID]
-            k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-2]] # [:-2] to skip 'timetype' and 'probability
-            k = tuple(k + [event])
+            k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-3]] # [:-2] to skip 'agerange', 'timetype', and 'probability
+            age = demo['end_age'] + month - end_time; agerange = None
+            for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
+                if curr_range[0] <= age <= curr_range[1]:
+                    agerange = AGE_RANGES[ind]; break
+            if agerange is None:
+                raise ValueError("Encountered age outside of valid age ranges: %s" % age)
+            k = tuple(k + [agerange, event])
             if k not in probs:
                 raise KeyError("Probability not found: %s" % k)
             p = probs[k]
             if random() <= p:
-                f.write("%s\t%s\n" % (ID,p))
+                f.write("%s\t%s\n" % (ID,month))
     f.close()
     return sample_times_fn
 
@@ -264,7 +276,7 @@ if __name__ == "__main__":
     probs = load_sample_time_probs(args.sample_time_probs_csv)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
-    calibration_fn, transmission_fn, all_times_fn, demographic_fn = run_abm_hiv_hrsa_sd(
+    end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn = run_abm_hiv_hrsa_sd(
         args.output,                   # FAVITES-ABM-HIV-SD-Lite output directory
         args.abm_hiv_params_xlsx,      # parameter XLSX file
         args.abm_hiv_trans_start,      # starting transition rate
@@ -274,4 +286,5 @@ if __name__ == "__main__":
         args.path_abm_hiv_modules)     # path to abm_hiv-HRSA_SD/modules folder
     print_log()
     print_log("Determining sample times...")
-    sample_times_fn = sample_times_from_all_times(args.output, demographic_fn, all_times_fn, probs)
+    sample_times_fn = sample_times_from_all_times(args.output, end_time, demographic_fn, all_times_fn, probs)
+    print_log("Sample times written to: %s" % sample_times_fn)
