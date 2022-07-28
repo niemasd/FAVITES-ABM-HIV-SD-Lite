@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 from datetime import datetime
+from math import exp
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
 from subprocess import check_output
 from sys import argv, stdout
+from treesap import nonhomogeneous_yule_tree
 from treeswift import read_tree_newick
 import argparse
 
@@ -242,7 +244,7 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
     f.close()
     return sample_times_fn
 
-def run_coatran_constant(outdir, transmission_fn, sample_times_fn, eff_pop_size, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     command = [path_coatran_constant, transmission_fn, sample_times_fn, str(eff_pop_size)]
     if verbose:
         print_log("Running CoaTran (Constant) Command: %s" % ' '.join(command))
@@ -251,10 +253,23 @@ def run_coatran_constant(outdir, transmission_fn, sample_times_fn, eff_pop_size,
     if verbose:
         print_log("Separate time trees written to: %s" % time_trees_fn)
         print_log("Loading time trees into TreeSwift...")
-    trees = [read_tree_newick(l) for l in coatran_stdout.decode().splitlines()]
+    time_trees = [read_tree_newick(l) for l in coatran_stdout.decode().splitlines()]
+    if verbose:
+        print_log("Sampling seed time tree...")
+    seed_time_tree = nonhomogeneous_yule_tree(lambda t: exp(-t**2)+1, end_num_leaves=len(time_trees))
+    seed_time_leaves = list(seed_time_tree.traverse_leaves())
     if verbose:
         print_log("Merging time trees into single time tree...")
-    exit() # TODO
+    for i in range(max(len(time_trees), len(seed_time_leaves))): # max included to trigger index-out-of-bounds if somehow lengths are different
+        seed_time_leaves[i].children.append(time_trees[i].root)
+    if verbose:
+        print_log("Suppressing unifurcations in merged time tree...")
+    seed_time_tree.suppress_unifurcations()
+    time_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.time.tre' % outdir
+    seed_time_tree.write_tree_newick(time_tree_fn)
+    if verbose:
+        print_log("Merged time tree written to: %s" % time_tree_fn)
+    return time_tree_fn
 
 # main execution
 if __name__ == "__main__":
@@ -306,5 +321,5 @@ if __name__ == "__main__":
     print_log("===== PHYLOGENY =====")
     print_log("=== Time Tree Arguments ===")
     print_log("Effective Population Size: %s" % args.coatran_eff_pop_size)
-    time_tree_fn = run_coatran_constant(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
