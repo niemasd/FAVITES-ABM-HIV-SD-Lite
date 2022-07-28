@@ -4,6 +4,7 @@ from math import exp
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
+from scipy.stats import truncnorm
 from subprocess import check_output
 from sys import argv, stdout
 from treesap import nonhomogeneous_yule_tree
@@ -120,6 +121,9 @@ def parse_args():
     parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="amb_hiv-HRSA-SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
+    parser.add_argument('--time_tree_seed_height', required=True, type=float, help="Time Tree: Seed Height (months)")
+    parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
+    parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
@@ -244,7 +248,7 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
     f.close()
     return sample_times_fn
 
-def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, seed_height, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     command = [path_coatran_constant, transmission_fn, sample_times_fn, str(eff_pop_size)]
     if verbose:
         print_log("Running CoaTran (Constant) Command: %s" % ' '.join(command))
@@ -257,6 +261,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, pat
     if verbose:
         print_log("Sampling seed time tree...")
     seed_time_tree = nonhomogeneous_yule_tree(lambda t: exp(-t**2)+1, end_num_leaves=len(time_trees))
+    seed_time_tree.scale_edges(seed_height/seed_time_tree.height())
     seed_time_leaves = list(seed_time_tree.traverse_leaves())
     if verbose:
         print_log("Merging time trees into single time tree...")
@@ -267,9 +272,21 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, pat
     seed_time_tree.suppress_unifurcations()
     time_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.time.tre' % outdir
     seed_time_tree.write_tree_newick(time_tree_fn)
-    if verbose:
-        print_log("Merged time tree written to: %s" % time_tree_fn)
     return time_tree_fn
+
+def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
+    if verbose:
+        print_log("Reloading time tree...")
+    tree = read_tree_newick(time_tree_fn)
+    if verbose:
+        print_log("Scaling time tree by sampling mutation rates...")
+    nodes = list(tree.traverse_preorder())
+    rates = truncnorm.rvs(a=0, b=float('inf'), loc=mutation_rate_loc, scale=mutation_rate_scale, size=len(nodes))
+    for i in range(max(len(nodes), len(rates))):
+        nodes[i].edge_length *= rates[i]
+    mut_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.tre' % outdir
+    tree.write_tree_newick(mut_tree_fn)
+    return mut_tree_fn
 
 # main execution
 if __name__ == "__main__":
@@ -321,5 +338,16 @@ if __name__ == "__main__":
     print_log("===== PHYLOGENY =====")
     print_log("=== Time Tree Arguments ===")
     print_log("Effective Population Size: %s" % args.coatran_eff_pop_size)
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, DEFAULT_PATH_COATRAN_CONSTANT)
+    print_log("Seed Height (months): %s" % args.time_tree_seed_height)
+    print_log()
+    print_log("=== CoaTran (Constant) Progress ===")
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, args.time_tree_seed_height, DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
+    print_log()
+    print_log("=== Mutation Tree Arguments ===")
+    print_log("Mutation Rate Truncated Normal Location (mutations/month): %s" % args.mutation_rate_loc)
+    print_log("Mutation Rate Truncated Normal Scale (mutations/month): %s" % args.mutation_rate_scale)
+    print_log()
+    print_log("=== Mutation Tree Progress ===")
+    mut_tree_fn = scale_tree(args.output, time_tree_fn, args.mutation_rate_loc, args.mutation_rate_scale)
+    print_log("Mutation tree written to: %s" % mut_tree_fn)
