@@ -24,5 +24,13 @@ RUN apt-get update && apt-get -y upgrade && \
     unzip HRSA_SD.zip && rm HRSA_SD.zip && \
     mv abm_hiv-HRSA_SD /usr/local/bin/abm_hiv-HRSA_SD && \
 
+    # Install CoaTran
+    wget -qO- "https://github.com/niemasd/CoaTran/archive/refs/tags/0.0.3.tar.gz" | tar -zx && \
+    cd CoaTran-* && \
+    make && \
+    mv coatran_* /usr/local/bin/ && \
+    cd .. && \
+    rm -rf CoaTran-*
+
     # Clean up
     rm -rf /root/.cache /tmp/*
