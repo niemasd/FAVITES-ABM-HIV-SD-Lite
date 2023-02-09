@@ -242,9 +242,10 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
             k = tuple(k + [agerange, event])
             if k not in probs:
                 raise KeyError("Probability not found: %s" % k)
-            p = probs[k]
-            if random() <= p:
-                f.write("%s\t%s\n" % (ID,month))
+            if k in probs:
+                p = probs[k]
+                if random() <= p:
+                    f.write("%s\t%s\n" % (ID,month))
     f.close()
     return sample_times_fn
 
