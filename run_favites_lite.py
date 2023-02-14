@@ -240,8 +240,6 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
             if agerange is None:
                 raise ValueError("Encountered age outside of valid age ranges: %s (ID: %s, month: %s, event: %s)" % (age,ID,month,event))
             k = tuple(k + [agerange, event])
-            if k not in probs:
-                raise KeyError("Probability not found: %s" % k)
             if k in probs:
                 p = probs[k]
                 if random() <= p:
