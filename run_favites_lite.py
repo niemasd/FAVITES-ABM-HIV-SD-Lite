@@ -222,12 +222,14 @@ def load_demographics(demographic_fn, delim='\t'):
 def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
     demographics = load_demographics(demographic_fn, delim=demographic_delim)
     sample_times_fn = '%s/error_free_files/sample_times.txt' % outdir; f = open(sample_times_fn, 'w') # TSV file
-    header = True
+    header = True; already_sampled = set()
     for l in open(all_times_fn):
         if header:
             header = False
         else:
             ID, month, event = [v.strip() for v in l.split(all_times_delim)]; month = float(month)
+            if ID in already_sampled:
+                continue
             if ID not in demographics:
                 raise KeyError("ID not found in demographic data: %s" % ID)
             demo = demographics[ID]
@@ -243,7 +245,7 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
             if k in probs:
                 p = probs[k]
                 if random() <= p:
-                    f.write("%s\t%s\n" % (ID,month))
+                    f.write("%s\t%s\n" % (ID,month)); already_sampled.add(ID)
     f.close()
     return sample_times_fn
 
