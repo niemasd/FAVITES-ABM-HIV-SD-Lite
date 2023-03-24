@@ -44,7 +44,6 @@ if __name__ == "__main__":
         raise ValueError("Root cannot have an edge length")
     tmrca = float(argv[2])
     node_times = {Node(u.strip()):float(v) for u,v in [l.strip().split('\t') for l in open(argv[3])]} # (time, Node) tuples
-    floating_nodes = set(node_times.keys())
     rate = float(argv[4])
 
     # add times of tree nodes
@@ -54,34 +53,41 @@ if __name__ == "__main__":
         else:
             node_times[node] = node_times[node.parent] + node.edge_length
 
-    # sort nodes in reverse order of time
+    # sort nodes in reverse order of time and coalesce
     nodes_rev_time = sorted([(node_times[node], node) for node in node_times], reverse=True)
-
-    # coalesce nodes as much as possible
     curr_tree_nodes = RandomPopList(); curr_floating_nodes = RandomPopList()
     nodes_ind = 0; curr_time = nodes_rev_time[0][0]
-    while True:
-        curr_time = nodes_rev_time[nodes_ind][0]
-        while nodes_ind < len(nodes_rev_time) and nodes_rev_time[nodes_ind][0] >= curr_time:
-            next_node = nodes_rev_time[nodes_ind][1]; nodes_ind += 1
-            if next_node in floating_nodes:
-                curr_floating_nodes.insert(next_node)
-            else:
-                if not next_node.is_root():
-                    curr_tree_nodes.insert(next_node)
-                for child in next_node.children:
-                    curr_tree_nodes.discard(child)
-        if nodes_ind == len(nodes_rev_time):
-            break # final coalescent window
-        while len(curr_floating_nodes) != 0 and len(curr_tree_nodes) != 0:
+    while nodes_ind < len(nodes_rev_time):
+        # add next node encountered going backwards in time
+        curr_time, next_node = nodes_rev_time[nodes_ind]; nodes_ind += 1
+        if next_node.is_root(): # root of input tree, or floating new node
+            curr_floating_nodes.insert(next_node)
+        else:
+            curr_tree_nodes.insert(next_node)
+        for child in next_node.children:
+            curr_tree_nodes.discard(child)
+
+        # coalesce as much as possible
+        while len(curr_floating_nodes) + len(curr_tree_nodes) != 1:
+            #print('F:%s, T:%s, I:%s, L:%s' % (len(curr_floating_nodes), len(curr_tree_nodes), nodes_ind, len(nodes_rev_time)))
+            # if no floating nodes right now, just skip to next time window
+            if len(curr_floating_nodes) == 0:
+                break
+
+            # determine coalescent time (one node must be floating, the other can be floating or tree)
             num_pairs_ff = len(curr_floating_nodes) * (len(curr_floating_nodes)-1)
             num_pairs_ft = len(curr_floating_nodes) * len(curr_tree_nodes)
             num_pairs_total = num_pairs_ff + num_pairs_ft
             coalescent_time = curr_time - exponential(scale=1./(rate*num_pairs_total))
-            if coalescent_time < nodes_rev_time[nodes_ind][0]:
+            if nodes_ind < len(nodes_rev_time) and coalescent_time < nodes_rev_time[nodes_ind][0]:
                 break
+
+            # create new parent node and pick random floating node to coalesce
             p = Node(); node_times[p] = coalescent_time
-            u = curr_floating_nodes.pop_random(); p.add_child(u); u.edge_length = node_times[u] - node_times[p]
+            u = curr_floating_nodes.pop_random()
+            p.add_child(u); u.edge_length = node_times[u] - node_times[p]
+
+            # flip coin to see if coalescing with floating or tree node, and then randomly pick and coalesce
             if random() < len(curr_tree_nodes)/(len(curr_tree_nodes)+len(curr_floating_nodes)):
                 v = curr_tree_nodes.pop_random(); curr_tree_nodes.insert(p)
                 v.parent.add_child(p); v.parent.remove_child(v); p.edge_length = node_times[p] - node_times[p.parent]
@@ -89,10 +95,8 @@ if __name__ == "__main__":
                 v = curr_floating_nodes.pop_random(); curr_floating_nodes.insert(p)
             p.add_child(v); v.edge_length = node_times[v] - node_times[p]
             curr_time = coalescent_time
-
-    # coalesce all remaining nodes
-    while len(curr_floating_nodes) != 0:
-        pass # TODO handle final window of coalescent events
+            if u == tree.root or v == tree.root:
+                tree.root = p
 
     # output tree
     print(tree.newick())
