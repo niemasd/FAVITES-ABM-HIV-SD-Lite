@@ -75,7 +75,7 @@ if __name__ == "__main__":
                 break
 
             # determine coalescent time (one node must be floating, the other can be floating or tree)
-            num_pairs_ff = len(curr_floating_nodes) * (len(curr_floating_nodes)-1)
+            num_pairs_ff = len(curr_floating_nodes) * (len(curr_floating_nodes)-1) / 2
             num_pairs_ft = len(curr_floating_nodes) * len(curr_tree_nodes)
             num_pairs_total = num_pairs_ff + num_pairs_ft
             coalescent_time = curr_time - exponential(scale=1./(rate*num_pairs_total))
