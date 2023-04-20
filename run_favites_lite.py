@@ -263,9 +263,11 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, see
         print_log("Sampling seed time tree...")
     seed_time_tree = nonhomogeneous_yule_tree(lambda t: exp(-t**2)+1, end_num_leaves=len(time_trees))
     seed_time_tree.scale_edges(seed_height/seed_time_tree.height())
-    seed_time_leaves = list(seed_time_tree.traverse_leaves())
+    seed_time_tree_fn = '%s/error_free_files/phylogenetic_trees/seed_tree.time.tre' % outdir; seed_time_tree.write_tree_newick(seed_time_tree_fn)
     if verbose:
+        print_log("Seed time tree written to: %s" % seed_time_tree_fn)
         print_log("Merging time trees into single time tree...")
+    seed_time_leaves = list(seed_time_tree.traverse_leaves())
     for i in range(max(len(time_trees), len(seed_time_leaves))): # max included to trigger index-out-of-bounds if somehow lengths are different
         seed_time_leaves[i].children.append(time_trees[i].root)
     if verbose:
