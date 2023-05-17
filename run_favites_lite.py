@@ -45,9 +45,9 @@ def print_log(s='', end='\n'):
         print(tmp, file=LOGFILE, end=end); LOGFILE.flush()
 
 # run abm_hiv-HRSA_SD
-def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time, path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, verbose=True):
+def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time, path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, verbose=True):
     # run the R script
-    command = ['Rscript', path_abm_hiv_commandline, path_abm_hiv_modules, abm_hiv_params_xlsx, str(abm_hiv_trans_start), str(abm_hiv_trans_end), str(abm_hiv_trans_time)]
+    command = ['Rscript', path_abm_hiv_commandline, path_abm_hiv_modules, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, str(abm_hiv_trans_start), str(abm_hiv_trans_end), str(abm_hiv_trans_time)]
     if verbose:
         print_log("Running abm_hiv-HRSA_SD Command: %s" % ' '.join(command))
     log_f = open('%s/%s' % (outdir,DEFAULT_FN_ABM_HIV_LOG), 'w')
@@ -115,10 +115,11 @@ def parse_args():
     # arg parser
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-o', '--output', required=True, type=str, help="Output Directory")
-    parser.add_argument('--abm_hiv_params_xlsx', required=True, type=str, help="abm_hiv-HRSA-SD: Parameter XLSX File")
-    parser.add_argument('--abm_hiv_trans_start', required=True, type=float, help="amb_hiv-HRSA-SD: Starting Transition Rate")
-    parser.add_argument('--abm_hiv_trans_end', required=True, type=float, help="amb_hiv-HRSA-SD: Ending Transition Rate")
-    parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="amb_hiv-HRSA-SD: Time (months) to Go from Starting to Ending Transition Rate")
+    parser.add_argument('--abm_hiv_params_xlsx', required=True, type=str, help="abm_hiv-HRSA_SD: Parameter XLSX File")
+    parser.add_argument('--abm_hiv_sd_demographics_csv', required=True, type=str, help="abm_hiv-HRSA_SD: Demographics CSV File")
+    parser.add_argument('--abm_hiv_trans_start', required=True, type=float, help="abm_hiv-HRSA_SD: Starting Transition Rate")
+    parser.add_argument('--abm_hiv_trans_end', required=True, type=float, help="abm_hiv-HRSA_SD: Ending Transition Rate")
+    parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
     parser.add_argument('--time_tree_seed_height', required=True, type=float, help="Time Tree: Seed Height (months)")
@@ -134,6 +135,7 @@ def parse_args():
     # fix/update args and return
     args.output = abspath(expanduser(args.output))
     args.abm_hiv_params_xlsx = abspath(expanduser(args.abm_hiv_params_xlsx))
+    args.abm_hiv_sd_demographics_csv = abspath(expanduser(args.abm_hiv_sd_demographics_csv))
     args.sample_time_probs_csv = abspath(expanduser(args.sample_time_probs_csv))
     args.path_abm_hiv_commandline = abspath(expanduser(args.path_abm_hiv_commandline))
     args.path_abm_hiv_modules = abspath(expanduser(args.path_abm_hiv_modules))
@@ -149,6 +151,10 @@ def check_args(args):
     if not isfile(args.abm_hiv_params_xlsx):
         raise ValueError("abm_hiv-HRSA_SD parameter XLSX file not found: %s" % args.abm_hiv_params_xlsx)
 
+    # check abm_hiv-HRSA_SD demographics CSV
+    if not isfile(args.abm_hiv_sd_demographics_csv):
+        raise ValueError("abm_hiv-HRSA_SD demographics CSV file not found: %s" % args.abm_hiv_sd_demographics_csv)
+
     # check starting transition rate
     if args.abm_hiv_trans_start <= 0:
         raise ValueError("abm_hiv-HRSA_SD starting transition rate must be positive: %s" % args.abm_hiv_trans_start)
@@ -159,7 +165,7 @@ def check_args(args):
 
     # check time to go from starting to ending transition rate
     if args.abm_hiv_trans_time <= 0:
-        raise ValueError("amb_hiv-HRSA_SD time from starting to ending transition rate must be positive: %s" % args.abm_hiv_trans_time)
+        raise ValueError("abm_hiv-HRSA_SD time from starting to ending transition rate must be positive: %s" % args.abm_hiv_trans_time)
 
     # check sample time probabilities
     if not isfile(args.sample_time_probs_csv):
@@ -316,6 +322,7 @@ if __name__ == "__main__":
     print_log("===== CONTACT AND TRANSMISSION NETWORK =====")
     print_log("=== Contact and Transmission Network Arguments ===")
     print_log("abm_hiv-HRSA_SD: Parameter XLSX: %s" % args.abm_hiv_params_xlsx)
+    print_log("abm_hiv-HRSA_SD: Demographics CSV: %s" % args.abm_hiv_sd_demographics_csv)
     print_log("abm_hiv-HRSA_SD: Starting Transition Rate: %s" % args.abm_hiv_trans_start)
     print_log("abm_hiv-HRSA_SD: Ending Transition Rate: %s" % args.abm_hiv_trans_end)
     print_log("abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate: %s" % args.abm_hiv_trans_time)
@@ -324,13 +331,14 @@ if __name__ == "__main__":
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
     end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn = run_abm_hiv_hrsa_sd(
-        args.output,                   # FAVITES-ABM-HIV-SD-Lite output directory
-        args.abm_hiv_params_xlsx,      # parameter XLSX file
-        args.abm_hiv_trans_start,      # starting transition rate
-        args.abm_hiv_trans_end,        # ending transition rate
-        args.abm_hiv_trans_time,       # time to go from starting to ending transition rate
-        args.path_abm_hiv_commandline, # path to abm_hiv-HRSA_SD/abm_hiv_commandline.R script
-        args.path_abm_hiv_modules)     # path to abm_hiv-HRSA_SD/modules folder
+        args.output,                      # FAVITES-ABM-HIV-SD-Lite output directory
+        args.abm_hiv_params_xlsx,         # parameter XLSX file
+        args.abm_hiv_sd_demographics_csv, # demographics CSV file
+        args.abm_hiv_trans_start,         # starting transition rate
+        args.abm_hiv_trans_end,           # ending transition rate
+        args.abm_hiv_trans_time,          # time to go from starting to ending transition rate
+        args.path_abm_hiv_commandline,    # path to abm_hiv-HRSA_SD/abm_hiv_commandline.R script
+        args.path_abm_hiv_modules)        # path to abm_hiv-HRSA_SD/modules folder
     print_log()
     print_log("Determining sample times...")
     sample_times_fn = sample_times_from_all_times(args.output, end_time, demographic_fn, all_times_fn, probs)
