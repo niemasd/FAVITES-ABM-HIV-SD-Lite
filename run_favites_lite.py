@@ -126,7 +126,7 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
         print_log("Demographic data written to: %s" % demographic_fn)
 
     # return output filenames
-    return end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn
+    return end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn
 
 # parse user args
 def parse_args():
@@ -140,7 +140,8 @@ def parse_args():
     parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
-    parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick)")
+    parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
+    parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree)")
     parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
     parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
@@ -274,7 +275,7 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
     f.close()
     return sample_times_fn
 
-def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, time_tree_seed_fn, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     command = [path_coatran_constant, transmission_fn, sample_times_fn, str(eff_pop_size)]
     if verbose:
         print_log("Running CoaTran (Constant) Command: %s" % ' '.join(command))
@@ -287,18 +288,39 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, eff_pop_size, tim
     if verbose:
         print_log("Loading seed time tree: %s" % time_tree_seed_fn)
     seed_time_tree = read_tree_newick(time_tree_seed_fn)
-    exit(1) # TODO MERGE TIME TREES INTO SEED TIME TREE
     if verbose:
         print_log("Merging time trees into single time tree...")
+    sampled_seeds = {l.split('\t')[0].strip() for l in open(sample_times_fn) if float(l.split('\t')[1]) == 0}
+    id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
+    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, verbose=verbose)
+    if verbose:
+        print_log("Suppressing unifurcations in merged time tree...")
+    merged_time_tree.suppress_unifurcations()
+    time_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.time.tre' % outdir
+    merged_time_tree.write_tree_newick(time_tree_fn)
+    return time_tree_fn
+
+def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, verbose=True):
+    # set things up
+    id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
+    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
+    merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
+
+    # label each node with its time for convenience/simplicity
+    for node in merged_time_tree.traverse_preorder():
+        if node.is_root():
+            node.edge_length = None; node.time = time_tree_tmrca
+        else:
+            node.time = node.parent.time
+            if node.edge_length is not None:
+                node.time += node.edge_length
+
+    # TODO MERGE TIME TREES INTO SEED TIME TREE
+    exit(1)
     seed_time_leaves = list(seed_time_tree.traverse_leaves())
     for i in range(max(len(time_trees), len(seed_time_leaves))): # max included to trigger index-out-of-bounds if somehow lengths are different
         seed_time_leaves[i].children.append(time_trees[i].root)
-    if verbose:
-        print_log("Suppressing unifurcations in merged time tree...")
-    seed_time_tree.suppress_unifurcations()
-    time_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.time.tre' % outdir
-    seed_time_tree.write_tree_newick(time_tree_fn)
-    return time_tree_fn
+    return merged_time_tree
 
 def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
     if verbose:
@@ -347,7 +369,7 @@ if __name__ == "__main__":
     probs = load_sample_time_probs(args.sample_time_probs_csv)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
-    end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn = run_abm_hiv_hrsa_sd(
+    end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
         args.output,                      # FAVITES-ABM-HIV-SD-Lite output directory
         args.abm_hiv_params_xlsx,         # parameter XLSX file
         args.abm_hiv_sd_demographics_csv, # demographics CSV file
@@ -367,9 +389,10 @@ if __name__ == "__main__":
     print_log("=== Time Tree Arguments ===")
     print_log("Effective Population Size: %s" % args.coatran_eff_pop_size)
     print_log("Seed Time Tree: %s" % args.time_tree_seed)
+    print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, args.coatran_eff_pop_size, args.time_tree_seed, DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
