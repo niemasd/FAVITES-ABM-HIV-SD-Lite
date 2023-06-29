@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime
 from math import exp
+from niemads import RandomSet
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
@@ -276,6 +277,18 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
     return sample_times_fn
 
 def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+    # map individuals to their seed
+    person_to_seed = dict(); infector = dict()
+    for l in open(transmission_fn):
+        u, v, t = [v.strip() for v in l.split('\t')]
+        if v in person_to_seed:
+            raise ValueError("Multi-infection in transmission network: %s" % v)
+        if u == 'None':
+            infector[v] = None; person_to_seed[v] = v
+        else:
+            infector[v] = u; person_to_seed[v] = person_to_seed[u]
+
+    # run CoaTran to get a phylogeny for each seed's transmission chain
     command = [path_coatran_constant, transmission_fn, sample_times_fn, str(eff_pop_size)]
     if verbose:
         print_log("Running CoaTran (Constant) Command: %s" % ' '.join(command))
@@ -283,11 +296,27 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     time_trees_fn = '%s/error_free_files/phylogenetic_trees/separate_trees.time.tre' % outdir; f = open(time_trees_fn, 'wb'); f.write(coatran_stdout); f.close()
     if verbose:
         print_log("Separate time trees written to: %s" % time_trees_fn)
+
+    # load time trees
+    if verbose:
         print_log("Loading time trees into TreeSwift...")
-    time_trees = [read_tree_newick(l) for l in coatran_stdout.decode().splitlines()]
+    time_tree_objects = [read_tree_newick(l) for l in coatran_stdout.decode().splitlines()]
+    time_trees = dict()
+    for tree in time_tree_objects:
+        seed = None
+        for leaf in tree.traverse_leaves():
+            person = leaf.label.split('|')[1].strip()
+            if person not in person_to_seed:
+                raise ValueError("Person not in transmission network: %s" % person)
+            seed = person_to_seed[person]
+            if seed in time_trees:
+                raise ValueError("Multiple phylogenies for seed: %s" % seed)
+            time_trees[seed] = tree; break
     if verbose:
         print_log("Loading seed time tree: %s" % time_tree_seed_fn)
     seed_time_tree = read_tree_newick(time_tree_seed_fn)
+
+    # merge time trees
     if verbose:
         print_log("Merging time trees into single time tree...")
     sampled_seeds = {l.split('\t')[0].strip() for l in open(sample_times_fn) if float(l.split('\t')[1]) == 0}
@@ -305,6 +334,9 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
     id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
     sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
     merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
+    seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves()}
+    seeds_with_leaves = set(seed_to_seed_leaf.keys())
+    seeds_without_leaves = RandomSet(set(time_trees.keys()) - seeds_with_leaves)
 
     # label each node with its time for convenience/simplicity
     for node in merged_time_tree.traverse_preorder():
@@ -315,11 +347,24 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
             if node.edge_length is not None:
                 node.time += node.edge_length
 
-    # TODO MERGE TIME TREES INTO SEED TIME TREE
+    # add seeds who don't have a leaf
+    while len(seeds_without_leaves) != 0:
+        curr_seed = seeds_without_leaves.pop_random()
+        curr_seed_tree = time_trees[curr_seed]
+        pass # TODO ADD curr_seed_tree TO merged_time_tree. Need to start at the root and do the time horizons thing (see email to Siavash and Joel)
+
+    # add seeds who do have a leaf
+    for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
+        curr_seed_tree = time_trees[curr_seed]
+        pass # TODO ADD curr_seed_tree TO merged_time_tree
     exit(1)
-    seed_time_leaves = list(seed_time_tree.traverse_leaves())
-    for i in range(max(len(time_trees), len(seed_time_leaves))): # max included to trigger index-out-of-bounds if somehow lengths are different
-        seed_time_leaves[i].children.append(time_trees[i].root)
+
+    # fix branch lengths based on node times
+    for node in merged_time_tree.traverse_preorder():
+        if node.is_root():
+            node.edge_length = None # shouldn't be necessary, but just in case
+        else:
+            node.edge_length = node.time - node.parent.time
     return merged_time_tree
 
 def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
