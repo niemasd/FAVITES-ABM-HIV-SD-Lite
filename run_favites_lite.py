@@ -7,7 +7,8 @@ from numpy.random import exponential
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
-from scipy.stats import truncnorm
+from scipy.stats import truncexpon, truncnorm
+from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
 #from treesap import nonhomogeneous_yule_tree
@@ -21,6 +22,8 @@ SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'race', 'agerange', 'timetype', 'p
 DEMOGRAPHICS_COLUMNS = ['id', 'gender', 'risk', 'age', 'race']
 AGE_RANGES = ['13-24', '25-54', '55-100']
 AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AGE_RANGES]
+NHPP_RATE_FUNC = lambda t: exp(-t**2)+1
+NHPP_EXP_RTT = 5.010476661748763
 
 # defaults
 DEFAULT_PATH_ABM_HIV_COMMANDLINE = "/usr/local/bin/abm_hiv-HRSA_SD/abm_hiv_commandline.R"
@@ -292,7 +295,7 @@ def sample_times_from_all_times(outdir, sim_duration, demographic_fn, all_times_
     f.close()
     return sample_times_fn
 
-def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, sim_start_time, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, sim_start_time, merge_model='yule', path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     # map individuals to their seed
     person_to_seed = dict(); infector = dict()
     for l in open(transmission_fn):
@@ -337,7 +340,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
         print_log("Merging time trees into single time tree...")
     sampled_seeds = {l.split('\t')[0].strip() for l in open(sample_times_fn) if float(l.split('\t')[1]) == 0}
     id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
-    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, verbose=verbose)
+    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, verbose=verbose)
     if verbose:
         print_log("Suppressing unifurcations in merged time tree...")
     merged_time_tree.suppress_unifurcations()
@@ -345,7 +348,12 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     merged_time_tree.write_tree_newick(time_tree_fn)
     return time_tree_fn
 
-def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, verbose=True):
+def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', verbose=True):
+    # check that model is valid
+    model = model.lower()
+    if model not in {'yule', 'nhpp'}:
+        raise ValueError("Invalid phylogenetic model: %s" % model)
+
     # label each node with its time and root distance (as # edges) for convenience/simplicity
     for node in seed_time_tree.traverse_preorder():
         if node.is_root():
@@ -360,9 +368,11 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
     sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
     merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
     merged_time_tree.suppress_unifurcations()
+    merged_time_tree_rtt = {node:dist for node, dist in merged_time_tree.distances_from_root(leaves=True, internal=False, unlabeled=True, weighted=True)}
     seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves()}
     seeds_with_leaves = set(seed_to_seed_leaf.keys())
     seeds_without_leaves = RandomSet(set(time_trees.keys()) - seeds_with_leaves)
+    merges_to_perform = [(seeds_without_leaves, merged_time_tree.root)]
 
     # label each node with its time and root distance (as # edges) for convenience/simplicity
     for tree in [merged_time_tree] + list(time_trees.values()):
@@ -380,52 +390,74 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
                 node.root_dist = node.parent.root_dist + 1
 
     # learn Yule splitting rate: expected BL = 1/(2lambda) -> lambda = 1/(2 * expected BL) = number of branches / (2 * sum of BL)
-    tmp_bls = [node.edge_length for node in merged_time_tree.traverse_preorder() if not node.is_root()]
-    yule_scale = 2. * sum(tmp_bls) / len(tmp_bls) # exponential scale = 1 / rate
+    if model == 'yule':
+        tmp_bls = [node.edge_length for node in merged_time_tree.traverse_preorder() if not node.is_root()]
+        yule_scale = 2. * sum(tmp_bls) / len(tmp_bls) # exponential scale = 1 / rate
 
-    # add seeds who don't have a leaf
-    time_horizons = sorted(merged_time_tree.traverse_preorder(), key=lambda x: (x.time, x.root_dist))
-    live_lineages = RandomSet([merged_time_tree.root]); horizon_ind = -1
+    # set up NHPP model
+    elif model == 'nhpp':
+        nhpp_rate_func = lambda t: NHPP_RATE_FUNC((t-time_tree_tmrca) * NHPP_EXP_RTT / mean(rtt.values()))
+
+    # find roots of subtrees where to add seeds who do have a leaf
+    for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
+        curr_seed_tree = time_trees[curr_seed]
+        avg_time_to_diagnosis = 1. # TODO REPLACE WITH DEMOGRAPHIC-STRATIFIED AVERAGE TIME TO DIAGNOSIS
+        time_to_diagnosis = truncexpon.rvs(scale=avg_time_to_diagnosis, b=merged_time_tree_rtt[curr_seed_leaf])
+        subtree_root = curr_seed_leaf
+        while (not subtree_root.is_root()) and time_to_diagnosis >= subtree_root.edge_length:
+            time_to_diagnosis -= subtree_root.edge_length; subtree_root = subtree_root.parent
+        if subtree_root == curr_seed_leaf:
+            subtree_root = curr_seed_leaf.parent
+        merges_to_perform.append((RandomSet([curr_seed]), subtree_root))
+
+    # find where to add each seed transmission chain phylogeny
     splits_to_add = dict() # keys = node objects in seed tree; values = list of phylo roots to add to the branch incident to this node
-    while True:
-        horizon_ind += 1
-        if horizon_ind == len(time_horizons) - 1: # skip latest node, as there won't be any lineages anymore
-            horizon_ind = 0; live_lineages = RandomSet([merged_time_tree.root])
-        curr_node = time_horizons[horizon_ind]; curr_time = curr_node.time; live_lineages.remove(curr_node)
-        for child in curr_node.children:
-            live_lineages.add(child)
+    for seeds_to_add, root in merges_to_perform:
+        time_horizons = sorted(root.traverse_preorder(), key=lambda x: (x.time, x.root_dist))
+        live_lineages = RandomSet([root]); horizon_ind = -1
         while True:
-            curr_time += exponential(scale=yule_scale/len(live_lineages))
-            if curr_time > time_horizons[horizon_ind+1].time:
+            horizon_ind += 1
+            if horizon_ind == len(time_horizons) - 1: # skip latest node, as there won't be any lineages anymore
+                horizon_ind = 0; live_lineages = RandomSet([root])
+            curr_node = time_horizons[horizon_ind]; curr_time = curr_node.time; live_lineages.remove(curr_node)
+            for child in curr_node.children:
+                live_lineages.add(child)
+            while True:
+                if model == 'yule':
+                    time_delta = exponential(scale=yule_scale/len(live_lineages))
+                elif model == 'nhpp':
+                    exit() # TODO
+                curr_time += time_delta
+                if curr_time > time_horizons[horizon_ind+1].time:
+                    break
+                split_lineage = live_lineages.top_random()
+                if split_lineage not in splits_to_add:
+                    splits_to_add[split_lineage] = list()
+                curr_seed = seeds_to_add.pop_random()
+                curr_seed_root = time_trees[curr_seed].root
+                curr_seed_root.insert_time = curr_time
+                splits_to_add[split_lineage].append(curr_seed_root)
+                if len(seeds_to_add) == 0:
+                    break
+            if len(seeds_to_add) == 0:
                 break
-            split_lineage = live_lineages.top_random()
-            if split_lineage not in splits_to_add:
-                splits_to_add[split_lineage] = list()
-            curr_seed = seeds_without_leaves.pop_random()
-            curr_seed_root = time_trees[curr_seed].root
-            curr_seed_root.insert_time = curr_time
-            splits_to_add[split_lineage].append(curr_seed_root)
-            if len(seeds_without_leaves) == 0:
-                break
-        if len(seeds_without_leaves) == 0:
-            break
+
+    # actually perform the merge
     for node, roots in splits_to_add.items():
         for root in sorted(roots, key=lambda x: (x.insert_time, x.root_dist)):
             parent = node.get_parent(); parent.remove_child(node)
             new_node = Node(); new_node.time = root.insert_time
             new_node.add_child(root); new_node.add_child(node); parent.add_child(new_node)
 
-    # add seeds who do have a leaf
-    for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
-        curr_seed_tree = time_trees[curr_seed]
-        pass # TODO ADD curr_seed_tree TO merged_time_tree
-
-    # fix branch lengths based on node times
+    # fix branch lengths based on node times, and clean up tree
+    merged_time_tree.suppress_unifurcations()
     for node in merged_time_tree.traverse_preorder():
         if node.is_root():
             node.edge_length = None # shouldn't be necessary, but just in case
         else:
             node.edge_length = node.time - node.parent.time
+        if not node.is_leaf(): # delete internal labels
+            node.label = None
     return merged_time_tree
 
 def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
@@ -434,7 +466,7 @@ def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, ver
     tree = read_tree_newick(time_tree_fn)
     if verbose:
         print_log("Scaling time tree by sampling mutation rates...")
-    nodes = list(tree.traverse_preorder())
+    nodes = [node for node in tree.traverse_preorder() if not node.is_root()]
     rates = truncnorm.rvs(a=0, b=float('inf'), loc=mutation_rate_loc, scale=mutation_rate_scale, size=len(nodes))
     for i in range(max(len(nodes), len(rates))):
         nodes[i].edge_length *= rates[i]
@@ -499,7 +531,7 @@ if __name__ == "__main__":
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
