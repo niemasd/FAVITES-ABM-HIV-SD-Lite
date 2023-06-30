@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
+from bisect import insort
 from datetime import datetime
 from math import exp
 from niemads import RandomSet
+from numpy.random import exponential
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
 from scipy.stats import truncnorm
 from subprocess import check_output
 from sys import argv, stdout
-from treesap import nonhomogeneous_yule_tree
-from treeswift import read_tree_newick
+#from treesap import nonhomogeneous_yule_tree
+from treeswift import Node, read_tree_newick
 import argparse
 
 # useful constants
@@ -68,10 +70,10 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
     transmission_data, abm_out = abm_out.strip().split('[1] "Sequence sample times..."')
     times_data, demographic_data = abm_out.strip().split('[1] "PLWH demographics..."')
 
-    # parse simulation end time
-    end_time = float(sim_progress_data.split('"Month:')[-1].split('"')[0])
+    # parse simulation duration
+    sim_duration = float(sim_progress_data.split('"Month:')[-1].split('"')[0]) / 12. # scale times from months to years
     if verbose:
-        print_log("Simulation end time (months): %s" % end_time)
+        print_log("Simulation duration (years): %s" % sim_duration)
 
     # parse the ID map data and write to file
     if verbose:
@@ -100,7 +102,9 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
         print_log("Parsing transmission network...")
     transmission_fn = '%s/error_free_files/transmission_network.txt' % outdir; f = open(transmission_fn, 'w')
     for l in transmission_data.strip().splitlines()[1:]:
-        f.write('\t'.join(v.strip() for v in l.strip().split()) + '\n')
+        u, v, t = [x.strip() for x in l.strip().split()]
+        t = float(t) / 12. # scale times from months to years
+        f.write('%s\t%s\t%s\n' % (u,v,t))
     f.close()
     if verbose:
         print_log("Transmission network written to: %s" % transmission_fn)
@@ -110,8 +114,11 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
         print_log("Parsing all event times...")
     times_data = [[v.strip() for v in l.strip().split()] for l in times_data.strip().splitlines()]
     all_times_fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_TIMES); f = open(all_times_fn, 'w')
-    for row in times_data:
-        f.write('\t'.join(row) + '\n')
+    for row_num, row in enumerate(times_data):
+        if row_num == 0:
+            f.write('ID\ttime (year)\tevent\n')
+        else:
+            f.write('%s\t%s\t%s\n' % (row[0], float(row[1]) / 12., row[2])) # scale times from months to years
     f.close()
     if verbose:
         print_log("All event times written to: %s" % all_times_fn)
@@ -127,13 +134,14 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
         print_log("Demographic data written to: %s" % demographic_fn)
 
     # return output filenames
-    return end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn
+    return sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn
 
 # parse user args
 def parse_args():
     # arg parser
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-o', '--output', required=True, type=str, help="Output Directory")
+    parser.add_argument('--sim_start_time', required=True, type=float, help="Simulation Start Time (year)")
     parser.add_argument('--abm_hiv_params_xlsx', required=True, type=str, help="abm_hiv-HRSA_SD: Parameter XLSX File")
     parser.add_argument('--abm_hiv_sd_demographics_csv', required=True, type=str, help="abm_hiv-HRSA_SD: Demographics CSV File")
     parser.add_argument('--abm_hiv_trans_start', required=True, type=float, help="abm_hiv-HRSA_SD: Starting Transition Rate")
@@ -142,7 +150,7 @@ def parse_args():
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
-    parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree)")
+    parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
     parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
@@ -200,6 +208,14 @@ def check_args(args):
     if not isdir(args.path_abm_hiv_modules):
         raise ValueError("abm_hiv-HRSA_SD/modules not found: %s" % args.path_abm_hiv_modules)
 
+    # check tMRCA
+    if args.time_tree_tmrca < 0:
+        raise ValueError("Time Tree tMRCA must be positive")
+
+    # check simulation start time
+    if args.sim_start_time < args.time_tree_tmrca:
+        raise ValueError("Simulation start time must be larger than time tree tMRCA")
+
 # load abm_hiv-HRSA_SD sample time probabilities
 def load_sample_time_probs(sample_time_probs_fn, delim=','):
     probs = dict() # probs[(gender,risk,agerange,race,timetype)] = sampling probability
@@ -246,7 +262,7 @@ def load_demographics(demographic_fn, delim='\t'):
     return demographics
 
 # get sample times from all possible times
-def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
+def sample_times_from_all_times(outdir, sim_duration, demographic_fn, all_times_fn, probs, demographic_delim='\t', all_times_delim='\t'):
     demographics = load_demographics(demographic_fn, delim=demographic_delim)
     sample_times_fn = '%s/error_free_files/sample_times.txt' % outdir; f = open(sample_times_fn, 'w') # TSV file
     header = True; already_sampled = set()
@@ -254,29 +270,29 @@ def sample_times_from_all_times(outdir, end_time, demographic_fn, all_times_fn, 
         if header:
             header = False
         else:
-            ID, month, event = [v.strip() for v in l.split(all_times_delim)]; month = float(month)
+            ID, t, event = [v.strip() for v in l.split(all_times_delim)]; t = float(t)
             if ID in already_sampled:
                 continue
             if ID not in demographics:
                 raise KeyError("ID not found in demographic data: %s" % ID)
             demo = demographics[ID]
             k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-3]] # [:-2] to skip 'agerange', 'timetype', and 'probability
-            age = int(demo['end_age'] + ((month - end_time) / 12)) # cast to int to round down
+            age = int(demo['end_age'] + t - sim_duration) # cast to int to round down
             agerange = None
             for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
                 if curr_range[0] <= age <= curr_range[1]:
                     agerange = AGE_RANGES[ind]; break
             if agerange is None:
-                raise ValueError("Encountered age outside of valid age ranges: %s (ID: %s, month: %s, event: %s)" % (age,ID,month,event))
+                raise ValueError("Encountered age outside of valid age ranges: %s (ID: %s, time: %s, event: %s)" % (age,ID,t,event))
             k = tuple(k + [agerange, event])
             if k in probs:
                 p = probs[k]
                 if random() <= p:
-                    f.write("%s\t%s\n" % (ID,month)); already_sampled.add(ID)
+                    f.write("%s\t%s\n" % (ID,t)); already_sampled.add(ID)
     f.close()
     return sample_times_fn
 
-def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, sim_start_time, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     # map individuals to their seed
     person_to_seed = dict(); infector = dict()
     for l in open(transmission_fn):
@@ -321,7 +337,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
         print_log("Merging time trees into single time tree...")
     sampled_seeds = {l.split('\t')[0].strip() for l in open(sample_times_fn) if float(l.split('\t')[1]) == 0}
     id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
-    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, verbose=verbose)
+    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, verbose=verbose)
     if verbose:
         print_log("Suppressing unifurcations in merged time tree...")
     merged_time_tree.suppress_unifurcations()
@@ -329,35 +345,81 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     merged_time_tree.write_tree_newick(time_tree_fn)
     return time_tree_fn
 
-def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, verbose=True):
-    # set things up
-    id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
-    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
-    merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
-    seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves()}
-    seeds_with_leaves = set(seed_to_seed_leaf.keys())
-    seeds_without_leaves = RandomSet(set(time_trees.keys()) - seeds_with_leaves)
-
-    # label each node with its time for convenience/simplicity
-    for node in merged_time_tree.traverse_preorder():
+def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, verbose=True):
+    # label each node with its time and root distance (as # edges) for convenience/simplicity
+    for node in seed_time_tree.traverse_preorder():
         if node.is_root():
-            node.edge_length = None; node.time = time_tree_tmrca
+            node.time = time_tree_tmrca
         else:
             node.time = node.parent.time
             if node.edge_length is not None:
                 node.time += node.edge_length
 
+    # set things up
+    id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
+    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
+    merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
+    merged_time_tree.suppress_unifurcations()
+    seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves()}
+    seeds_with_leaves = set(seed_to_seed_leaf.keys())
+    seeds_without_leaves = RandomSet(set(time_trees.keys()) - seeds_with_leaves)
+
+    # label each node with its time and root distance (as # edges) for convenience/simplicity
+    for tree in [merged_time_tree] + list(time_trees.values()):
+        for node in tree.traverse_preorder():
+            if node.is_root():
+                node.edge_length = None; node.root_dist = 0
+                if node is merged_time_tree.root:
+                    node.time = time_tree_tmrca
+                else:
+                    node.time = sim_start_time
+            else:
+                if node.edge_length is None:
+                    node.edge_length = 0
+                node.time = node.parent.time + node.edge_length
+                node.root_dist = node.parent.root_dist + 1
+    print(merged_time_tree) # TODO DELTE
+
+    # learn Yule splitting rate: expected BL = 1/(2lambda) -> lambda = 1/(2 * expected BL) = number of branches / (2 * sum of BL)
+    tmp_bls = [node.edge_length for node in merged_time_tree.traverse_preorder() if not node.is_root()]
+    yule_scale = 2. * sum(tmp_bls) / len(tmp_bls) # exponential scale = 1 / rate
+
     # add seeds who don't have a leaf
-    while len(seeds_without_leaves) != 0:
-        curr_seed = seeds_without_leaves.pop_random()
-        curr_seed_tree = time_trees[curr_seed]
-        pass # TODO ADD curr_seed_tree TO merged_time_tree. Need to start at the root and do the time horizons thing (see email to Siavash and Joel)
+    time_horizons = sorted(merged_time_tree.traverse_preorder(), key=lambda x: (x.time, x.root_dist))
+    live_lineages = RandomSet([merged_time_tree.root]); horizon_ind = -1
+    splits_to_add = dict() # keys = node objects in seed tree; values = list of phylo roots to add to the branch incident to this node
+    while True:
+        horizon_ind += 1
+        if horizon_ind == len(time_horizons) - 1: # skip latest node, as there won't be any lineages anymore
+            horizon_ind = 0; live_lineages = RandomSet([merged_time_tree.root])
+        curr_node = time_horizons[horizon_ind]; curr_time = curr_node.time; live_lineages.remove(curr_node)
+        for child in curr_node.children:
+            live_lineages.add(child)
+        while True:
+            curr_time += exponential(scale=yule_scale/len(live_lineages))
+            if curr_time > time_horizons[horizon_ind+1].time:
+                break
+            split_lineage = live_lineages.top_random()
+            if split_lineage not in splits_to_add:
+                splits_to_add[split_lineage] = list()
+            curr_seed = seeds_without_leaves.pop_random()
+            curr_seed_root = time_trees[curr_seed].root
+            curr_seed_root.insert_time = curr_time
+            splits_to_add[split_lineage].append(curr_seed_root)
+            if len(seeds_without_leaves) == 0:
+                break
+        if len(seeds_without_leaves) == 0:
+            break
+    for node, roots in splits_to_add.items():
+        for root in sorted(roots, key=lambda x: (x.time, x.root_dist)):
+            parent = node.get_parent(); parent.remove_child(node)
+            new_node = Node(); new_node.time = root.insert_time
+            new_node.add_child(root); new_node.add_child(node); parent.add_child(new_node)
 
     # add seeds who do have a leaf
     for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
         curr_seed_tree = time_trees[curr_seed]
         pass # TODO ADD curr_seed_tree TO merged_time_tree
-    exit(1)
 
     # fix branch lengths based on node times
     for node in merged_time_tree.traverse_preorder():
@@ -365,6 +427,7 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
             node.edge_length = None # shouldn't be necessary, but just in case
         else:
             node.edge_length = node.time - node.parent.time
+    print(merged_time_tree); exit(1) # TODO DELETE
     return merged_time_tree
 
 def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
@@ -405,6 +468,7 @@ if __name__ == "__main__":
     # simulate contact and transmission network
     print_log("===== CONTACT AND TRANSMISSION NETWORK =====")
     print_log("=== Contact and Transmission Network Arguments ===")
+    print_log("Simulation Start Time (year): %s" % args.sim_start_time)
     print_log("abm_hiv-HRSA_SD: Parameter XLSX: %s" % args.abm_hiv_params_xlsx)
     print_log("abm_hiv-HRSA_SD: Demographics CSV: %s" % args.abm_hiv_sd_demographics_csv)
     print_log("abm_hiv-HRSA_SD: Starting Transition Rate: %s" % args.abm_hiv_trans_start)
@@ -414,7 +478,7 @@ if __name__ == "__main__":
     probs = load_sample_time_probs(args.sample_time_probs_csv)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
-    end_time, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
+    sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
         args.output,                      # FAVITES-ABM-HIV-SD-Lite output directory
         args.abm_hiv_params_xlsx,         # parameter XLSX file
         args.abm_hiv_sd_demographics_csv, # demographics CSV file
@@ -425,7 +489,7 @@ if __name__ == "__main__":
         args.path_abm_hiv_modules)        # path to abm_hiv-HRSA_SD/modules folder
     print_log()
     print_log("Determining sample times...")
-    sample_times_fn = sample_times_from_all_times(args.output, end_time, demographic_fn, all_times_fn, probs)
+    sample_times_fn = sample_times_from_all_times(args.output, sim_duration, demographic_fn, all_times_fn, probs)
     print_log("Sample times written to: %s" % sample_times_fn)
     print_log(); print_log()
 
@@ -437,7 +501,7 @@ if __name__ == "__main__":
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
