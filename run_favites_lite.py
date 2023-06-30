@@ -378,7 +378,6 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
                     node.edge_length = 0
                 node.time = node.parent.time + node.edge_length
                 node.root_dist = node.parent.root_dist + 1
-    print(merged_time_tree) # TODO DELTE
 
     # learn Yule splitting rate: expected BL = 1/(2lambda) -> lambda = 1/(2 * expected BL) = number of branches / (2 * sum of BL)
     tmp_bls = [node.edge_length for node in merged_time_tree.traverse_preorder() if not node.is_root()]
@@ -411,7 +410,7 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
         if len(seeds_without_leaves) == 0:
             break
     for node, roots in splits_to_add.items():
-        for root in sorted(roots, key=lambda x: (x.time, x.root_dist)):
+        for root in sorted(roots, key=lambda x: (x.insert_time, x.root_dist)):
             parent = node.get_parent(); parent.remove_child(node)
             new_node = Node(); new_node.time = root.insert_time
             new_node.add_child(root); new_node.add_child(node); parent.add_child(new_node)
@@ -427,7 +426,6 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
             node.edge_length = None # shouldn't be necessary, but just in case
         else:
             node.edge_length = node.time - node.parent.time
-    print(merged_time_tree); exit(1) # TODO DELETE
     return merged_time_tree
 
 def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
