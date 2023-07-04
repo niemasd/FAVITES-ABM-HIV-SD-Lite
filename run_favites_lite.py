@@ -11,7 +11,7 @@ from scipy.stats import truncexpon, truncnorm
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
-#from treesap import nonhomogeneous_yule_tree
+from treesap.NHPP import NHPP_first_interarrival_time
 from treeswift import Node, read_tree_newick
 import argparse
 
@@ -396,7 +396,7 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
 
     # set up NHPP model
     elif model == 'nhpp':
-        nhpp_rate_func = lambda t: NHPP_RATE_FUNC((t-time_tree_tmrca) * NHPP_EXP_RTT / mean(rtt.values()))
+        avg_rtt = mean(merged_time_tree_rtt.values()); nhpp_scale_ratio = NHPP_EXP_RTT / avg_rtt
 
     # find roots of subtrees where to add seeds who do have a leaf
     for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
@@ -426,7 +426,9 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
                 if model == 'yule':
                     time_delta = exponential(scale=yule_scale/len(live_lineages))
                 elif model == 'nhpp':
-                    exit() # TODO
+                    curr_nhpp_rate_func = lambda t: NHPP_RATE_FUNC((t + curr_time - time_tree_tmrca) * nhpp_scale_ratio)
+                    rv = NHPP_first_interarrival_time(a=0); rv.set_L(curr_nhpp_rate_func)
+                    time_delta = rv.rvs(size=1)[0] / nhpp_scale_ratio
                 curr_time += time_delta
                 if curr_time > time_horizons[horizon_ind+1].time:
                     break
