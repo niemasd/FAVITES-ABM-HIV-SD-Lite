@@ -339,9 +339,8 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     # merge time trees
     if verbose:
         print_log("Merging time trees into single time tree...")
-    sampled_seeds = {l.split('\t')[0].strip() for l in open(sample_times_fn) if float(l.split('\t')[1]) == 0}
     id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
-    merged_time_tree = merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, verbose=verbose)
+    merged_time_tree = merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, verbose=verbose)
     if verbose:
         print_log("Suppressing unifurcations in merged time tree...")
     merged_time_tree.suppress_unifurcations()
@@ -349,7 +348,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     merged_time_tree.write_tree_newick(time_tree_fn)
     return time_tree_fn
 
-def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', verbose=True):
+def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', verbose=True):
     # check that model is valid
     model = model.lower()
     if model not in {'yule', 'nhpp'}:
@@ -366,7 +365,7 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
 
     # set things up
     id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
-    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim and id_real_to_sim[node.label.split('_')[0].strip()] in sampled_seeds}
+    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim}
     merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
     merged_time_tree.suppress_unifurcations()
     merged_time_tree_rtt = {node:dist for node, dist in merged_time_tree.distances_from_root(leaves=True, internal=False, unlabeled=True, weighted=True)}
@@ -401,6 +400,8 @@ def merge_trees(seed_time_tree, time_trees, sampled_seeds, id_sim_to_real, time_
 
     # find roots of subtrees where to add seeds who do have a leaf
     for curr_seed, curr_seed_leaf in seed_to_seed_leaf.items():
+        if curr_seed not in time_trees:
+            continue
         curr_seed_tree = time_trees[curr_seed]
         avg_time_to_diagnosis = 1. # TODO REPLACE WITH DEMOGRAPHIC-STRATIFIED AVERAGE TIME TO DIAGNOSIS
         time_to_diagnosis = truncexpon.rvs(scale=avg_time_to_diagnosis, b=merged_time_tree_rtt[curr_seed_leaf])
