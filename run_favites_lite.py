@@ -84,7 +84,8 @@ def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv
     id_map_data = [[v.strip() for v in l.strip().split()] for l in id_map_data.strip().splitlines()]
     id_map_fn = '%s/%s' % (outdir, DEFAULT_FN_ABM_HIV_ID_MAP); f = open(id_map_fn, 'w')
     for row in id_map_data:
-        f.write('\t'.join(row) + '\n')
+        if row[1].upper() != 'NA':
+            f.write('\t'.join(row) + '\n')
     f.close()
     if verbose:
         print_log("ID map data written to: %s" % id_map_fn)
