@@ -155,6 +155,7 @@ def parse_args():
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
+    parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
     parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
     parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
@@ -296,7 +297,7 @@ def sample_times_from_all_times(outdir, sim_duration, demographic_fn, all_times_
     f.close()
     return sample_times_fn
 
-def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, sim_start_time, merge_model='yule', path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
+def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_pop_size, time_tree_seed_fn, time_tree_tmrca, sim_start_time, merge_model='yule', only_include_mapped=False, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT, verbose=True):
     # map individuals to their seed
     person_to_seed = dict(); infector = dict()
     for l in open(transmission_fn):
@@ -340,7 +341,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     if verbose:
         print_log("Merging time trees into single time tree...")
     id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
-    merged_time_tree = merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, verbose=verbose)
+    merged_time_tree = merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, only_include_mapped=only_include_mapped, verbose=verbose)
     if verbose:
         print_log("Suppressing unifurcations in merged time tree...")
     merged_time_tree.suppress_unifurcations()
@@ -348,7 +349,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     merged_time_tree.write_tree_newick(time_tree_fn)
     return time_tree_fn
 
-def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', verbose=True):
+def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', only_include_mapped=False, verbose=True):
     # check that model is valid
     model = model.lower()
     if model not in {'yule', 'nhpp'}:
@@ -365,11 +366,14 @@ def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim
 
     # set things up
     id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
-    sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim}
+    if only_include_mapped:
+        sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time and node.label.split('_')[0].strip() in id_real_to_sim}
+    else:
+        sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time}
     merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
     merged_time_tree.suppress_unifurcations()
     merged_time_tree_rtt = {node:dist for node, dist in merged_time_tree.distances_from_root(leaves=True, internal=False, unlabeled=True, weighted=True)}
-    seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves()}
+    seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves() if node.label.split('_')[0].strip() in id_real_to_sim}
     seeds_with_leaves = set(seed_to_seed_leaf.keys())
     seeds_without_leaves = RandomSet(set(time_trees.keys()) - seeds_with_leaves)
     merges_to_perform = [(seeds_without_leaves, merged_time_tree.root)]
@@ -535,7 +539,7 @@ if __name__ == "__main__":
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
