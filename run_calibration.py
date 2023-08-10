@@ -147,7 +147,7 @@ def run_calibration(
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
         o = check_output(run_favites_lite_command)
         abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % curr_outdir)
-        print(abm_calibration_data); exit(1) # TODO DELETE
+        print(calibration_data); print(abm_calibration_data); exit(1) # TODO DELETE
         exit(1) # TODO CALCULATE AND RETURN SCORE
 
     # run calibration
