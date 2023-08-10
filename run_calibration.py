@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from run_favites_lite import DEFAULT_PATH_ABM_HIV_COMMANDLINE, DEFAULT_PATH_ABM_HIV_MODULES, DEFAULT_PATH_COATRAN_CONSTANT
+from csv import reader
 from datetime import datetime
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
@@ -70,20 +71,61 @@ def check_args(args):
     if not isfile(args.calibration_csv):
         raise ValueError("Calibration CSV not found: %s" % args.calibration_csv)
 
+# load calibration data from CSV; calibration_data[description] = (value, weight)
+def load_calibration_data(calibration_csv):
+    calibration_data = dict()
+    for row in reader(open(calibration_csv)):
+        d, v, w = [x.strip() for x in row]
+        if d.lower() == 'description':
+            continue # skip header row
+        if d in calibration_data:
+            raise ValueError("Duplicate entry in calibration CSV: %s" % d)
+        calibration_data[d] = (float(v), float(w))
+    return calibration_data
+
+# load calibration data output by the ABM R code; data[metric][year][subgroup] = count
+def load_abm_calibration_output(abm_calibration_tsv):
+    data = dict()
+    for row in reader(open(abm_calibration_tsv), delimiter='\t'):
+        metric, month, subgroup, stat = [x.strip() for x in row]
+        if metric.lower() == 'metric':
+            continue # skip header row
+        if metric not in data:
+            data[metric] = dict()
+        year = int(month) // 12
+        if year not in data[metric]:
+            data[metric][year] = dict()
+        if subgroup not in data[metric][year]:
+            data[metric][year][subgroup] = 0
+        data[metric][year][subgroup] += int(stat)
+    return data
+
 # run calibration
 def run_calibration(
-        outdir, sim_start_time,
+        calibration_data, output, sim_start_time,
         abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time,
         sample_time_probs_csv, coatran_eff_pop_size, time_tree_seed, time_tree_tmrca, time_tree_only_include_mapped,
         mutation_rate_loc, mutation_rate_scale,
         path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
     ):
+    # prep calibration
+    x0 = [0] # TODO REPLACE WITH ACTUAL STARTING VALUES BASED ON calibration_data
+    bounds = [
+        (-100, 100), # TODO SET BOUNDS FOR x0[0], x0[1], etc.
+    ]
+    options = {
+        'maxiter': 2, # max number of iterations (TODO change from 1 to some other value; maybe function parameter with default value?)
+    }
+    iter_num = 0
+    run_favites_lite_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'run_favites_lite.py')
 
+    # nested optimization function
     def opt_func(x):
-        run_favites_lite_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'run_favites_lite.py')
+        nonlocal iter_num; iter_num += 1
+        curr_outdir = '%s/favites.output.%s' % (output, str(iter_num).zfill(3))
         run_favites_lite_command = [
             run_favites_lite_path,
-            '--output', output,
+            '--output', curr_outdir,
             '--sim_start_time', str(sim_start_time),
             '--abm_hiv_params_xlsx', abm_hiv_params_xlsx,
             '--abm_hiv_sd_demographics_csv', abm_hiv_sd_demographics_csv,
@@ -102,8 +144,14 @@ def run_calibration(
         ]
         if time_tree_only_include_mapped:
             run_favites_lite_command.append('--time_tree_only_include_mapped')
-        print_log("Running FAVITES command: %s" % ' '.join(run_favites_lite_command))
+        print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
         o = check_output(run_favites_lite_command)
+        abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % curr_outdir)
+        print(abm_calibration_data); exit(1) # TODO DELETE
+        exit(1) # TODO CALCULATE AND RETURN SCORE
+
+    # run calibration
+    minimize(opt_func, x0, bounds=bounds, options=options)
 
 # main execution
 if __name__ == "__main__":
@@ -116,8 +164,15 @@ if __name__ == "__main__":
     # print run info to log
     print_log("===== RUN INFORMATION =====")
     print_log("Calibration command: %s" % ' '.join(argv))
+    print_log(); print_log()
+
+    # run calibration
+    print_log("===== CALIBRATION =====")
+    print_log("Loading calibration data: %s" % args.calibration_csv)
+    calibration_data = load_calibration_data(args.calibration_csv)
+    print_log("Running calibration...")
     run_calibration(
-        args.output+'/RUN1', args.sim_start_time,
+        calibration_data, args.output, args.sim_start_time,
         args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.abm_hiv_trans_start, args.abm_hiv_trans_end, args.abm_hiv_trans_time,
         args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
         args.mutation_rate_loc, args.mutation_rate_scale,
