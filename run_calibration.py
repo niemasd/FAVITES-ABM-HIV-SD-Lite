@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+from run_favites_lite import DEFAULT_PATH_ABM_HIV_COMMANDLINE, DEFAULT_PATH_ABM_HIV_MODULES, DEFAULT_PATH_COATRAN_CONSTANT
+from datetime import datetime
+from os import chdir, getcwd, makedirs
+from os.path import abspath, expanduser, isdir, isfile
+from scipy.optimize import minimize
+from subprocess import check_output
+from sys import argv, stdout
+import argparse
+
+# useful constants
+LOGFILE = None
+DEFAULT_FN_LOG = "log_favites_calibration.txt"
+
+# return the current time as a string
+def get_time():
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+# print to the log (None implies stdout only)
+def print_log(s='', end='\n'):
+    tmp = "[%s] %s" % (get_time(), s)
+    print(tmp, end=end); stdout.flush()
+    if LOGFILE is not None:
+        print(tmp, file=LOGFILE, end=end); LOGFILE.flush()
+
+# parse user args
+def parse_args():
+    # arg parser
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-o', '--output', required=True, type=str, help="Output Directory")
+    parser.add_argument('--calibration_csv', required=True, type=str, help="Calibration CSV")
+    parser.add_argument('--sim_start_time', required=True, type=float, help="Simulation Start Time (year)")
+    parser.add_argument('--abm_hiv_params_xlsx', required=True, type=str, help="abm_hiv-HRSA_SD: Parameter XLSX File")
+    parser.add_argument('--abm_hiv_sd_demographics_csv', required=True, type=str, help="abm_hiv-HRSA_SD: Demographics CSV File")
+    parser.add_argument('--abm_hiv_trans_start', required=True, type=float, help="abm_hiv-HRSA_SD: Starting Transition Rate")
+    parser.add_argument('--abm_hiv_trans_end', required=True, type=float, help="abm_hiv-HRSA_SD: Ending Transition Rate")
+    parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate")
+    parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
+    parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
+    parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
+    parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
+    parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
+    parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
+    parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
+    parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
+    parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
+    parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
+    parser.add_argument('--path_coatran_constant', required=False, type=str, default=DEFAULT_PATH_COATRAN_CONSTANT, help="Path to coatran_constant")
+    parser.add_argument('--version', action='store_true', help="Display Version")
+    args = parser.parse_args()
+
+    # fix/update args and return
+    args.output = abspath(expanduser(args.output))
+    args.calibration_csv = abspath(expanduser(args.calibration_csv))
+    args.abm_hiv_params_xlsx = abspath(expanduser(args.abm_hiv_params_xlsx))
+    args.abm_hiv_sd_demographics_csv = abspath(expanduser(args.abm_hiv_sd_demographics_csv))
+    args.sample_time_probs_csv = abspath(expanduser(args.sample_time_probs_csv))
+    args.time_tree_seed = abspath(expanduser(args.time_tree_seed))
+    args.path_abm_hiv_commandline = abspath(expanduser(args.path_abm_hiv_commandline))
+    args.path_abm_hiv_modules = abspath(expanduser(args.path_abm_hiv_modules))
+    return args
+
+# check user args (most will be checked by run_favites_lite.py)
+def check_args(args):
+    # check output directory 
+    if isdir(args.output) or isfile(args.output):
+        raise ValueError("Output directory exists: %s" % args.output)
+
+    # check calibration CSV
+    if not isfile(args.calibration_csv):
+        raise ValueError("Calibration CSV not found: %s" % args.calibration_csv)
+
+# run calibration
+def run_calibration(
+        outdir, sim_start_time,
+        abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time,
+        sample_time_probs_csv, coatran_eff_pop_size, time_tree_seed, time_tree_tmrca, time_tree_only_include_mapped,
+        mutation_rate_loc, mutation_rate_scale,
+        path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
+    ):
+
+    def opt_func(x):
+        run_favites_lite_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'run_favites_lite.py')
+        run_favites_lite_command = [
+            run_favites_lite_path,
+            '--output', output,
+            '--sim_start_time', str(sim_start_time),
+            '--abm_hiv_params_xlsx', abm_hiv_params_xlsx,
+            '--abm_hiv_sd_demographics_csv', abm_hiv_sd_demographics_csv,
+            '--abm_hiv_trans_start', str(abm_hiv_trans_start),
+            '--abm_hiv_trans_end', str(abm_hiv_trans_end),
+            '--abm_hiv_trans_time', str(abm_hiv_trans_time),
+            '--sample_time_probs_csv', sample_time_probs_csv,
+            '--coatran_eff_pop_size', str(coatran_eff_pop_size),
+            '--time_tree_seed', time_tree_seed,
+            '--time_tree_tmrca', str(time_tree_tmrca),
+            '--mutation_rate_loc', str(mutation_rate_loc),
+            '--mutation_rate_scale', str(mutation_rate_scale),
+            '--path_abm_hiv_commandline', path_abm_hiv_commandline,
+            '--path_abm_hiv_modules', path_abm_hiv_modules,
+            '--path_coatran_constant', path_coatran_constant,
+        ]
+        if time_tree_only_include_mapped:
+            run_favites_lite_command.append('--time_tree_only_include_mapped')
+        print_log("Running FAVITES command: %s" % ' '.join(run_favites_lite_command))
+        o = check_output(run_favites_lite_command)
+
+# main execution
+if __name__ == "__main__":
+    # parse/check user args and set things up
+    args = parse_args(); check_args(args)
+    makedirs(args.output, exist_ok=True)
+    LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
+    LOGFILE = open(LOGFILE_fn, 'w')
+
+    # print run info to log
+    print_log("===== RUN INFORMATION =====")
+    print_log("Calibration command: %s" % ' '.join(argv))
+    run_calibration(
+        args.output+'/RUN1', args.sim_start_time,
+        args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.abm_hiv_trans_start, args.abm_hiv_trans_end, args.abm_hiv_trans_time,
+        args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
+        args.mutation_rate_loc, args.mutation_rate_scale,
+        args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
+    ) # TODO DELETE
