@@ -121,6 +121,7 @@ def run_calibration(
 
     # nested optimization function
     def opt_func(x):
+        # run FAVITES
         nonlocal iter_num; iter_num += 1
         curr_outdir = '%s/favites.output.%s' % (output, str(iter_num).zfill(3))
         run_favites_lite_command = [
@@ -146,9 +147,29 @@ def run_calibration(
             run_favites_lite_command.append('--time_tree_only_include_mapped')
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
         o = check_output(run_favites_lite_command)
+
+        # calculate optimization function score
         abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % curr_outdir)
-        print(calibration_data); print(abm_calibration_data); exit(1) # TODO DELETE
-        exit(1) # TODO CALCULATE AND RETURN SCORE
+        score = 0
+        for cal_key, cal_tup in calibration_data.items():
+            sim_val = None; cal_val, cal_w = cal_tup
+            if '_' in cal_key:
+                try:
+                    year, risk = cal_key.split('_')
+                    year = int(year)
+                    risk = risk.replace(' & ', 'and')
+                    if risk.lower() == 'other':
+                        risk = 'other' # 'other' is lowercase in the ABM R code output
+                    sim_val = abm_calibration_data['newinfects_agg'][year-sim_start_time][risk]
+                except:
+                    pass # sim_val will remain None, so ValueError below will be thrown
+            if sim_val is None:
+                raise ValueError("Unknown calibration key: %s" % cal_key)
+            else:
+                score += cal_w * ((sim_val-cal_val)**2)
+        score = score**0.5
+        print_log("FAVITES iteration %d score: %s" % (iter_num, score))
+        return score
 
     # run calibration
     minimize(opt_func, x0, bounds=bounds, options=options)
