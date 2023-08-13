@@ -2,8 +2,10 @@
 from run_favites_lite import DEFAULT_PATH_ABM_HIV_COMMANDLINE, DEFAULT_PATH_ABM_HIV_MODULES, DEFAULT_PATH_COATRAN_CONSTANT
 from csv import reader
 from datetime import datetime
+from openpyxl import load_workbook
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
+from random import randint
 from scipy.optimize import minimize
 from subprocess import check_output
 from sys import argv, stdout
@@ -12,6 +14,7 @@ import argparse
 # useful constants
 LOGFILE = None
 DEFAULT_FN_LOG = "log_favites_calibration.txt"
+MAX_RNG_SEED = 2147483647
 
 # return the current time as a string
 def get_time():
@@ -118,17 +121,26 @@ def run_calibration(
     }
     iter_num = 0
     run_favites_lite_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'run_favites_lite.py')
+    abm_xlsx_dir = '%s/abm_xlsx' % output
+    makedirs(abm_xlsx_dir, exist_ok=True)
 
     # nested optimization function
     def opt_func(x):
-        # run FAVITES
+        # set up FAVITES run
         nonlocal iter_num; iter_num += 1
         curr_outdir = '%s/favites.output.%s' % (output, str(iter_num).zfill(3))
+        curr_data_xlsx = '%s/abm.data.%s.xlsx' % (abm_xlsx_dir, str(iter_num).zfill(3))
+        wb = load_workbook(abm_hiv_params_xlsx) # load original ABM XLSX
+        wb['High Level Pop + Sim Features']['B4'] = randint(0, MAX_RNG_SEED) # replace ABM seed
+        wb['High Level Pop + Sim Features']['B4'].number_format = '0' # ABM seed is int, not string
+        wb.save(curr_data_xlsx)
+
+        # run FAVITES
         run_favites_lite_command = [
             run_favites_lite_path,
             '--output', curr_outdir,
             '--sim_start_time', str(sim_start_time),
-            '--abm_hiv_params_xlsx', abm_hiv_params_xlsx,
+            '--abm_hiv_params_xlsx', curr_data_xlsx,
             '--abm_hiv_sd_demographics_csv', abm_hiv_sd_demographics_csv,
             '--abm_hiv_trans_start', str(abm_hiv_trans_start),
             '--abm_hiv_trans_end', str(abm_hiv_trans_end),
@@ -198,4 +210,5 @@ if __name__ == "__main__":
         args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
         args.mutation_rate_loc, args.mutation_rate_scale,
         args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
-    ) # TODO DELETE
+    )
+    pass # TODO CONTINUE HERE
