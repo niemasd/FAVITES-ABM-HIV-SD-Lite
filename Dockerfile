@@ -20,6 +20,7 @@ RUN apt-get update && apt-get -y upgrade && \
     R -e "install.packages('readxl')" && \
     R -e "install.packages('tidyverse')" && \
     R -e "install.packages('tictoc')" && \
+    R -e "install.packages('fastRG')" && \
 
     # Install abm_hiv-HRSA_SD
     wget -q https://github.com/mathematica-pub/abm_hiv/archive/refs/heads/HRSA_SD.zip && \
