@@ -160,7 +160,7 @@ def run_calibration(
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
         o = check_output(run_favites_lite_command)
 
-        # calculate optimization function score
+        # calculate optimization function score TODO REFACTOR INTO OWN FUNCTION
         abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % curr_outdir)
         score = 0
         for cal_key, cal_tup in calibration_data.items():
