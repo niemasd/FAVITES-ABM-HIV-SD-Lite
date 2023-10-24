@@ -213,6 +213,10 @@ def check_args(args):
     if not isdir(args.path_abm_hiv_modules):
         raise ValueError("abm_hiv-HRSA_SD/modules not found: %s" % args.path_abm_hiv_modules)
 
+    # check seed real tree
+    if not isfile(args.time_tree_seed):
+        raise ValueError("Seed time tree Newick file not found: %s" % args.time_tree_seed)
+
     # check tMRCA
     if args.time_tree_tmrca < 0:
         raise ValueError("Time Tree tMRCA must be positive")
@@ -514,20 +518,24 @@ if __name__ == "__main__":
     print_log("abm_hiv-HRSA_SD: Ending Transition Rate: %s" % args.abm_hiv_trans_end)
     print_log("abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate: %s" % args.abm_hiv_trans_time)
     print_log("Loading Sample Time Probabilities (CSV): %s" % args.sample_time_probs_csv)
-    probs_copy_fn = '%s/inputs/sample_time_probs.csv' % args.output
-    f = open(probs_copy_fn, 'w'); f.write(open(args.sample_time_probs_csv).read()); f.close()
-    probs = load_sample_time_probs(probs_copy_fn)
+    probs_csv_copy_fn = '%s/inputs/sample_time_probs.csv' % args.output
+    f = open(probs_csv_copy_fn, 'w'); f.write(open(args.sample_time_probs_csv).read()); f.close()
+    probs = load_sample_time_probs(probs_csv_copy_fn)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
+    data_xlsx_copy_fn = '%s/inputs/data.xlsx' % args.output
+    f = open(data_xlsx_copy_fn, 'wb'); f.write(open(args.abm_hiv_params_xlsx,'rb').read()); f.close()
+    dem_csv_copy_fn = '%s/inputs/demographics.csv' % args.output
+    f = open(dem_csv_copy_fn, 'w'); f.write(open(args.abm_hiv_sd_demographics_csv).read()); f.close()
     sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
-        args.output,                      # FAVITES-ABM-HIV-SD-Lite output directory
-        args.abm_hiv_params_xlsx,         # parameter XLSX file
-        args.abm_hiv_sd_demographics_csv, # demographics CSV file
-        args.abm_hiv_trans_start,         # starting transition rate
-        args.abm_hiv_trans_end,           # ending transition rate
-        args.abm_hiv_trans_time,          # time to go from starting to ending transition rate
-        args.path_abm_hiv_commandline,    # path to abm_hiv-HRSA_SD/abm_hiv_commandline.R script
-        args.path_abm_hiv_modules)        # path to abm_hiv-HRSA_SD/modules folder
+        args.output,                   # FAVITES-ABM-HIV-SD-Lite output directory
+        data_xlsx_copy_fn,             # parameter XLSX file
+        dem_csv_copy_fn,               # demographics CSV file
+        args.abm_hiv_trans_start,      # starting transition rate
+        args.abm_hiv_trans_end,        # ending transition rate
+        args.abm_hiv_trans_time,       # time to go from starting to ending transition rate
+        args.path_abm_hiv_commandline, # path to abm_hiv-HRSA_SD/abm_hiv_commandline.R script
+        args.path_abm_hiv_modules)     # path to abm_hiv-HRSA_SD/modules folder
     print_log()
     print_log("Determining sample times...")
     sample_times_fn = sample_times_from_all_times(args.output, sim_duration, demographic_fn, all_times_fn, probs)
@@ -542,7 +550,9 @@ if __name__ == "__main__":
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
+    f = open(time_tree_seed_copy_fn, 'w'); f.write(open(args.time_tree_seed).read()); f.close()
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
