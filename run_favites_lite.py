@@ -38,7 +38,7 @@ DEFAULT_FN_LOG = "log_favites.txt"
 
 # check if user is just printing version
 if '--version' in argv:
-    print("FAVITES-COVID-Lite version %s" % VERSION); exit()
+    print("FAVITES-ABM-HIV-SD-Lite version %s" % VERSION); exit()
 
 # return the current time as a string
 def get_time():
@@ -487,6 +487,7 @@ if __name__ == "__main__":
     # parse/check user args and set things up
     args = parse_args(); check_args(args)
     makedirs(args.output, exist_ok=True)
+    makedirs('%s/inputs' % args.output, exist_ok=True)
     makedirs('%s/error_free_files' % args.output, exist_ok=True)
     makedirs('%s/error_free_files/phylogenetic_trees' % args.output, exist_ok=True)
     LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
@@ -513,7 +514,9 @@ if __name__ == "__main__":
     print_log("abm_hiv-HRSA_SD: Ending Transition Rate: %s" % args.abm_hiv_trans_end)
     print_log("abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate: %s" % args.abm_hiv_trans_time)
     print_log("Loading Sample Time Probabilities (CSV): %s" % args.sample_time_probs_csv)
-    probs = load_sample_time_probs(args.sample_time_probs_csv)
+    probs_copy_fn = '%s/inputs/sample_time_probs.csv' % args.output
+    f = open(probs_copy_fn, 'w'); f.write(open(args.sample_time_probs_csv).read()); f.close()
+    probs = load_sample_time_probs(probs_copy_fn)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
     sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
