@@ -4,6 +4,7 @@ from datetime import datetime
 from math import exp
 from niemads import RandomSet
 from numpy.random import exponential
+from openpyxl import load_workbook
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
@@ -508,7 +509,7 @@ if __name__ == "__main__":
     print_log("Gzip Output: %s" % args.gzip_output)
     print_log(); print_log()
 
-    # simulate contact and transmission network
+    # get ready for simulating contact and transmission network
     print_log("===== CONTACT AND TRANSMISSION NETWORK =====")
     print_log("=== Contact and Transmission Network Arguments ===")
     print_log("Simulation Start Time (year): %s" % args.sim_start_time)
@@ -523,8 +524,13 @@ if __name__ == "__main__":
     probs = load_sample_time_probs(probs_csv_copy_fn)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
+
+    # update data.xlsx file (if needed)
     data_xlsx_copy_fn = '%s/inputs/data.xlsx' % args.output
-    f = open(data_xlsx_copy_fn, 'wb'); f.write(open(args.abm_hiv_params_xlsx,'rb').read()); f.close()
+    wb = load_workbook(args.abm_hiv_params_xlsx, data_only=True)
+    wb.save(data_xlsx_copy_fn); wb.close()
+
+    # run ABM R code
     dem_csv_copy_fn = '%s/inputs/demographics.csv' % args.output
     f = open(dem_csv_copy_fn, 'w'); f.write(open(args.abm_hiv_sd_demographics_csv).read()); f.close()
     sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
