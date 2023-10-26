@@ -4,7 +4,9 @@ from datetime import datetime
 from math import exp
 from niemads import RandomSet
 from numpy.random import exponential
-from openpyxl import load_workbook
+from openpyxl import load_workbook, Workbook
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.styles import Alignment
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
@@ -528,6 +530,11 @@ if __name__ == "__main__":
     # update data.xlsx file (if needed)
     data_xlsx_copy_fn = '%s/inputs/data.xlsx' % args.output
     wb = load_workbook(args.abm_hiv_params_xlsx, data_only=True)
+    for ws in wb.worksheets:
+        for row in ws:
+            for cell in row:
+                if isinstance(cell.value, str):
+                    cell.value = cell.value.replace('\n', '\r\n')
     wb.save(data_xlsx_copy_fn); wb.close()
 
     # run ABM R code
