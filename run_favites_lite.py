@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-from bisect import insort
 from datetime import datetime
 from math import exp
 from niemads import RandomSet
@@ -165,6 +164,7 @@ def parse_args():
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
     parser.add_argument('--path_coatran_constant', required=False, type=str, default=DEFAULT_PATH_COATRAN_CONSTANT, help="Path to coatran_constant")
+    parser.add_argument('--abm_xlsx_rng_seed', required=False, type=int, default=None, help="Override ABM XLSX RNG Seed")
     parser.add_argument('--version', action='store_true', help="Display Version")
     args = parser.parse_args()
 
@@ -227,6 +227,10 @@ def check_args(args):
     # check simulation start time
     if args.sim_start_time < args.time_tree_tmrca:
         raise ValueError("Simulation start time must be larger than time tree tMRCA")
+
+    # check ABM XLSX RNG Seed
+    if args.abm_xlsx_rng_seed is not None and args.abm_xlsx_rng_seed < 0:
+        raise ValueError("ABM XLSX RNG Seed must be non-negative: %s" % args.abm_xlsx_rng_seed)
 
 # load abm_hiv-HRSA_SD sample time probabilities
 def load_sample_time_probs(sample_time_probs_fn, delim=','):
@@ -530,6 +534,11 @@ if __name__ == "__main__":
     # update data.xlsx file (if needed)
     data_xlsx_copy_fn = '%s/inputs/data.xlsx' % args.output
     wb = load_workbook(args.abm_hiv_params_xlsx, data_only=True)
+    if args.abm_xlsx_rng_seed is not None:
+        print_log("Overriding ABM RNG seed: %s" % args.abm_xlsx_rng_seed)
+        wb['High Level Pop + Sim Features']['B4'] = args.abm_xlsx_rng_seed
+
+    # fix data.xlsx and save
     for ws in wb.worksheets:
         for row in ws:
             for cell in row:
