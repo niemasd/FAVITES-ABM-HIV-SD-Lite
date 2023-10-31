@@ -6,11 +6,13 @@ from glob import glob
 from openpyxl import load_workbook
 from os import chdir, cpu_count, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
-from random import randint
+from random import randint, seed
 from scipy.optimize import minimize
+from shutil import make_archive, rmtree
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
+from zipfile import ZIP_DEFLATED, ZipFile
 import argparse
 
 # useful constants
@@ -50,7 +52,7 @@ def parse_args():
     parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
     parser.add_argument('--num_reps_per_score', required=False, type=int, default=5, help="Number of replicates to run per scoring of a parameter set")
     parser.add_argument('--max_num_threads', required=False, type=int, default=cpu_count(), help="Max number of threads to use")
-    parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
+    parser.add_argument('--zip_output', action='store_true', help="Gzip Compress Output Files")
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
     parser.add_argument('--path_coatran_constant', required=False, type=str, default=DEFAULT_PATH_COATRAN_CONSTANT, help="Path to coatran_constant")
@@ -98,6 +100,7 @@ def run_calibration(
         mutation_rate_loc, mutation_rate_scale,
         num_reps_per_score, max_num_threads,
         path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
+        zip_output=False,
     ):
     # prep calibration
     x0 = [0] # TODO REPLACE WITH ACTUAL STARTING VALUES BASED ON calibration_csv
@@ -118,10 +121,11 @@ def run_calibration(
         curr_outdir = '%s/favites.output.%s' % (output, str(iter_num).zfill(3))
         makedirs(curr_outdir, exist_ok=True)
         rep_nums = [str(i).zfill(3) for i in range(1, num_reps_per_score+1)]
+        seed(); rng_seed_base = randint(0, 99999)
         run_favites_lite_command = [
-            'parallel', '--jobs', str(max_num_threads),
+            'parallel', '--jobs', str(max_num_threads), '--link',
             run_favites_lite_path,
-            '--output', '%s/{}' % curr_outdir,
+            '--output', '%s/{1}' % curr_outdir,
             '--sim_start_time', str(sim_start_time),
             '--abm_hiv_params_xlsx', abm_hiv_params_xlsx,
             '--abm_hiv_sd_demographics_csv', abm_hiv_sd_demographics_csv,
@@ -137,23 +141,27 @@ def run_calibration(
             '--path_abm_hiv_commandline', path_abm_hiv_commandline,
             '--path_abm_hiv_modules', path_abm_hiv_modules,
             '--path_coatran_constant', path_coatran_constant,
+            '--abm_xlsx_rng_seed', '{2}',
         ]
         if time_tree_only_include_mapped:
             run_favites_lite_command.append('--time_tree_only_include_mapped')
         run_favites_lite_command += [':::'] + rep_nums
+        run_favites_lite_command += [':::'] + [str(rng_seed_base+int(v)) for v in rep_nums]
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
         o = check_output(run_favites_lite_command)
 
         # calculate optimization function score TODO REFACTOR INTO OWN FUNCTION
         score_simulation_output_command = [
             'parallel', '--jobs', str(max_num_threads),
-            score_simulation_output_path, '%s/{}' % curr_outdir, calibration_csv,
-            '>', '%s/{}/score.txt' % curr_outdir,
+            score_simulation_output_path, '%s/{1}' % curr_outdir, calibration_csv,
+            '>', '%s/{1}/score.txt' % curr_outdir,
         ] + [':::'] + rep_nums
         print_log("Calculating optimization function score: %s" % ' '.join(score_simulation_output_command))
         check_output(score_simulation_output_command)
         score = mean(float(open(fn).read()) for fn in glob('%s/*/score.txt' % curr_outdir))
         print_log("FAVITES iteration %d average score: %s" % (iter_num, score))
+        if zip_output:
+            print_log("Zipping output..."); make_archive(curr_outdir, 'zip', curr_outdir); rmtree(curr_outdir)
         return score
 
     # run calibration
@@ -182,5 +190,6 @@ if __name__ == "__main__":
         args.mutation_rate_loc, args.mutation_rate_scale,
         args.num_reps_per_score, args.max_num_threads,
         args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
+        zip_output=args.zip_output,
     )
     pass # TODO CONTINUE HERE
