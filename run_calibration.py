@@ -158,7 +158,7 @@ def run_calibration(
         ] + [':::'] + rep_nums
         print_log("Calculating optimization function score: %s" % ' '.join(score_simulation_output_command))
         check_output(score_simulation_output_command)
-        score = mean(float(open(fn).read()) for fn in glob('%s/*/score.txt' % curr_outdir))
+        score = mean(float(open(fn).read().split()[-1]) for fn in glob('%s/*/score.txt' % curr_outdir))
         print_log("FAVITES iteration %d average score: %s" % (iter_num, score))
         if zip_output:
             print_log("Zipping output..."); make_archive(curr_outdir, 'zip', curr_outdir); rmtree(curr_outdir)

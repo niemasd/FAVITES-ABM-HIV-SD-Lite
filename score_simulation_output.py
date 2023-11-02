@@ -34,11 +34,12 @@ def load_abm_calibration_output(abm_calibration_tsv):
     return data
 
 # scoring function we want to optimize
-def score(sim_out_folder, calibration_csv):
+def score(sim_out_folder, calibration_csv, verbose=True):
     calibration_data = load_calibration_data(calibration_csv)
     abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % sim_out_folder)
     score = 0
     sim_start_time = int(sorted(k for k in calibration_data.keys() if re.match(r'[0-9]{4}_',k))[0].split('_')[0])
+    print("Calibration Key\tReal Value\tSimulation Value")
     for cal_key, cal_tup in calibration_data.items():
         sim_val = None; cal_val, cal_w = cal_tup
         if '_' in cal_key:
@@ -54,8 +55,12 @@ def score(sim_out_folder, calibration_csv):
         if sim_val is None:
             raise ValueError("Unknown calibration key: %s" % cal_key)
         else:
+            if verbose:
+                print("%s\t%s\t%s" % (cal_key, cal_val, sim_val))
             score += cal_w * ((sim_val-cal_val)**2)
     score = score**0.5
+    if verbose:
+        print("Overall Calibration Score\tN/A\t%s" % score)
     return score
 
 # main execution
@@ -67,4 +72,3 @@ if __name__ == "__main__":
     if not isfile(argv[2]):
         print("File not found: %s" % argv[2]); exit(1)
     s = score(argv[1], argv[2])
-    print(s)
