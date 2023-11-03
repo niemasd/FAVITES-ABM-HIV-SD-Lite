@@ -14,7 +14,7 @@ from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
 from treesap.NHPP import NHPP_first_interarrival_time
-from treeswift import Node, read_tree_newick
+from treeswift import Node, read_tree_newick, read_tree_nexus
 import argparse
 
 # useful constants
@@ -155,7 +155,7 @@ def parse_args():
     parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
-    parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
+    parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick/Nexus File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
     parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
@@ -346,7 +346,10 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
             time_trees[seed] = tree; break
     if verbose:
         print_log("Loading seed time tree: %s" % time_tree_seed_fn)
-    seed_time_tree = read_tree_newick(time_tree_seed_fn)
+    if time_tree_seed_fn.lower().endswith('.nex'):
+        seed_time_tree = list(read_tree_nexus(time_tree_seed_fn).values())[0]
+    else:
+        seed_time_tree = read_tree_newick(time_tree_seed_fn)
 
     # merge time trees
     if verbose:
@@ -572,7 +575,10 @@ if __name__ == "__main__":
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
+    if args.time_tree_seed.lower().endswith('.nexus') or args.time_tree_seed.lower().endswith('.nex'):
+        time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nex' % args.output
+    else:
+        time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
     f = open(time_tree_seed_copy_fn, 'w'); f.write(open(args.time_tree_seed).read()); f.close()
     time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
     print_log("Time tree written to: %s" % time_tree_fn)
