@@ -211,7 +211,7 @@ def run_calibration(
         # calculate optimization function score TODO REFACTOR INTO OWN FUNCTION
         score_simulation_output_command = [
             'parallel', '--jobs', str(max_num_threads),
-            score_simulation_output_path, '%s/{1}' % curr_outdir, calibration_csv,
+            score_simulation_output_path, '%s/{1}' % curr_outdir, calibration_csv, calibration_mode,
             '>', '%s/{1}/score.txt' % curr_outdir,
         ] + [':::'] + rep_nums
         print_log("Calculating optimization function score: %s" % ' '.join(score_simulation_output_command))
