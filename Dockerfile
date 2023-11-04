@@ -10,6 +10,7 @@ RUN apt-get update && apt-get -y upgrade && \
     pip3 install treesap && \
     pip3 install openpyxl && \
     pip3 install treeswift && \
+    pip3 install niemads && \
 
     # Install required R packages
     R -e "install.packages('gtools')" && \
