@@ -165,6 +165,15 @@ def parse_args():
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
     parser.add_argument('--path_coatran_constant', required=False, type=str, default=DEFAULT_PATH_COATRAN_CONSTANT, help="Path to coatran_constant")
     parser.add_argument('--abm_xlsx_rng_seed', required=False, type=int, default=None, help="Override ABM XLSX RNG Seed")
+    parser.add_argument('--abm_xlsx_idu_injections_per_month', required=False, type=float, default=None, help="Override ABM XLSX IDU Injections Per Month")
+    parser.add_argument('--abm_xlsx_het_partners_per_person_per_month', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Partners Per Person Per Month")
+    parser.add_argument('--abm_xlsx_het_assortativity_risk', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Assortativity (Risk)")
+    parser.add_argument('--abm_xlsx_het_assortativity_hiv_status', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Assortativity (HIV Status)")
+    parser.add_argument('--abm_xlsx_msm_partners_per_person_per_month', required=False, type=float, default=None, help="Override ABM XLSX MSM Partners Per Person Per Month")
+    parser.add_argument('--abm_xlsx_msm_assortativity_risk', required=False, type=float, default=None, help="Override ABM XLSX MSM Assortativity (Risk)")
+    parser.add_argument('--abm_xlsx_msm_assortativity_hiv_status', required=False, type=float, default=None, help="Override ABM XLSX MSM Assortativity (HIV Status)")
+    parser.add_argument('--abm_xlsx_msm_hiv_monthly_transmission_prob_mult', required=False, type=float, default=None, help="Override ABM XLSX MSM HIV Monthly Transmission Probability Between Pairs Multiplier")
+    parser.add_argument('--abm_xlsx_msmw_percentage_msm_msmw', required=False, type=float, default=None, help="Override ABM XLSX MSMW Percentage of MSM who are MSMW")
     parser.add_argument('--version', action='store_true', help="Display Version")
     args = parser.parse_args()
 
@@ -228,9 +237,19 @@ def check_args(args):
     if args.sim_start_time < args.time_tree_tmrca:
         raise ValueError("Simulation start time must be larger than time tree tMRCA")
 
-    # check ABM XLSX RNG Seed
+    # check ABM XLSX overrides
     if args.abm_xlsx_rng_seed is not None and args.abm_xlsx_rng_seed < 0:
         raise ValueError("ABM XLSX RNG Seed must be non-negative: %s" % args.abm_xlsx_rng_seed)
+    if args.abm_xlsx_idu_injections_per_month is not None and args.abm_xlsx_idu_injections_per_month < 0:
+        raise ValueError("ABM XLSX IDU Injections Per Month must be non-negative: %s" % args.abm_xlsx_idu_injections_per_month)
+    if args.abm_xlsx_het_partners_per_person_per_month is not None and args.abm_xlsx_het_partners_per_person_per_month < 0:
+        raise ValueError("ABM XLSX Heterosexual Partners Per Person Per Month must be non-negative: %s" % args.abm_xlsx_het_partners_per_person_per_month)
+    if args.abm_xlsx_msm_partners_per_person_per_month is not None and args.abm_xlsx_msm_partners_per_person_per_month < 0:
+        raise ValueError("ABM XLSX MSM Partners Per Person Per Month must be non-negative: %s" % args.abm_xlsx_msm_partners_per_person_per_month)
+    if args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult is not None and args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult < 0:
+        raise ValueError("ABM XLSX MSM HIV Monthly Transmission Probability Between Partners Multiplier must be non-negative: %s" % args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult)
+    if args.abm_xlsx_msmw_percentage_msm_msmw is not None and (args.abm_xlsx_msmw_percentage_msm_msmw < 0 or args.abm_xlsx_msmw_percentage_msm_msmw > 1):
+        raise ValueError("ABM XLSX MSMW Percentage of MSM who are MSMW must be in the range [0, 1]: %s" % args.abm_xlsx_msmw_percentage_msm_msmw
 
 # load abm_hiv-HRSA_SD sample time probabilities
 def load_sample_time_probs(sample_time_probs_fn, delim=','):
@@ -540,6 +559,33 @@ if __name__ == "__main__":
     if args.abm_xlsx_rng_seed is not None:
         print_log("Overriding ABM RNG seed: %s" % args.abm_xlsx_rng_seed)
         wb['High Level Pop + Sim Features']['B4'] = args.abm_xlsx_rng_seed
+    if args.abm_xlsx_idu_injections_per_month is not None:
+        print_log("Overriding ABM IDU Injections Per Month: %s" % args.abm_xlsx_idu_injections_per_month)
+        wb['Transmission + At-Risk Features']['B7'] = args.abm_xlsx_idu_injections_per_month
+    if args.abm_xlsx_het_partners_per_person_per_month is not None:
+        print_log("Overriding ABM Heterosexual Partners Per Person Per Month: %s" % args.abm_xlsx_het_partners_per_person_per_month)
+        wb['Transmission + At-Risk Features']['D13'] = args.abm_xlsx_het_partners_per_person_per_month
+    if args.abm_xlsx_het_assortativity_risk is not None:
+        print_log("Overriding ABM Heterosexual Assortativity (Risk): %s" % args.abm_xlsx_het_assortativity_risk)
+        wb['Transmission + At-Risk Features']['D17'] = args.abm_xlsx_het_assortativity_risk
+    if args.abm_xlsx_het_assortativity_hiv_status is not None:
+        print_log("Overriding ABM Heterosexual Assortativity (HIV Status): %s" % args.abm_xlsx_het_assortativity_hiv_status)
+        wb['Transmission + At-Risk Features']['D18'] = args.abm_xlsx_het_assortativity_hiv_status
+    if args.abm_xlsx_msm_partners_per_person_per_month is not None:
+        print_log("Overriding ABM MSM Partners Per Person Per Month: %s" % args.abm_xlsx_msm_partners_per_person_per_month)
+        wb['Transmission + At-Risk Features']['D30'] = args.abm_xlsx_msm_partners_per_person_per_month
+    if args.abm_xlsx_msm_assortativity_risk is not None:
+        print_log("Overriding ABM MSM Assortativity (Risk): %s" % args.abm_xlsx_msm_assortativity_risk)
+        wb['Transmission + At-Risk Features']['D34'] = args.abm_xlsx_msm_assortativity_risk
+    if args.abm_xlsx_msm_assortativity_hiv_status is not None:
+        print_log("Overriding ABM MSM Assortativity (HIV Status): %s" % args.abm_xlsx_msm_assortativity_hiv_status)
+        wb['Transmission + At-Risk Features']['D35'] = args.abm_xlsx_msm_assortativity_hiv_status
+    if args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult is not None:
+        print_log("Overriding ABM MSM HIV Monthly Transmission Probability Between Partners Multiplier: %s" % args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult)
+        wb['Transmission + At-Risk Features']['D37'] = args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult
+    if args.abm_xlsx_msmw_percentage_msm_msmw is not None:
+        print_log("Overriding ABM MSMW Percentage of MSM who are MSMW: %s" % args.abm_xlsx_msmw_percentage_msm_msmw
+        wb['Transmission + At-Risk Features']['D46'] = args.abm_xlsx_msmw_percentage_msm_msmw
 
     # fix data.xlsx and save
     for ws in wb.worksheets:

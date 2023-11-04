@@ -99,14 +99,61 @@ def run_calibration(
         sample_time_probs_csv, coatran_eff_pop_size, time_tree_seed, time_tree_tmrca, time_tree_only_include_mapped,
         mutation_rate_loc, mutation_rate_scale,
         num_reps_per_score, max_num_threads,
+        calibration_mode, # "epi" or "epi+genetic"
         path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
         zip_output=False,
     ):
-    # prep calibration
-    x0 = [0] # TODO REPLACE WITH ACTUAL STARTING VALUES BASED ON calibration_csv
-    bounds = [
-        (-100, 100), # TODO SET BOUNDS FOR x0[0], x0[1], etc.
-    ]
+    # prep calibration parameters
+    calibration_mode_parts = set(calibration_mode.lower().split('+'))
+    x0 = list(); bounds = list(); override_cli_args = list()
+    if 'epi' in calibration_mode_parts:
+        # IDU injections per month
+        x0.append(0.05)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_idu_injections_per_month')
+
+        # heterosexual partners per person per month
+        x0.append(1.1)
+        bounds.append((0.8, 1.5))
+        override_cli_args.append('--abm_xlsx_het_partners_per_person_per_month')
+
+        # heterosexual assortativity (HIV status)
+        x0.append(0.7)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_het_assortativity_hiv_status')
+
+        # MSM partners per person per month
+        x0.append(1.1)
+        bounds.append((0.8, 1.5))
+        override_cli_args.append('--abm_xlsx_msm_partners_per_person_per_month')
+
+        # MSM assortativity (HIV status)
+        x0.append(0.7)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_msm_assortativity_hiv_status')
+
+        # MSM HIV monthly transmission probability between partners multiplier
+        x0.append(1)
+        bounds.append((1, 2))
+        override_cli_args.append('--abm_xlsx_msm_hiv_monthly_transmission_prob_mult')
+
+    if 'genetic' in calibration_mode_parts:
+        # heterosexual assortativity (risk)
+        x0.append(0.2)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_het_assortativity_risk')
+
+        # MSM assortativity (risk)
+        x0.append(0.2)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_msm_assortativity_risk')
+
+        # MSMW percentage of MSM who are MSMW
+        x0.append(0)
+        bounds.append((0, 1))
+        override_cli_args.append('--abm_xlsx_msmw_percentage_msm_msmw')
+
+    # prep calibration execution
     options = {
         'maxiter': 2, # max number of iterations (TODO change from 1 to some other value; maybe function parameter with default value?)
     }
@@ -116,7 +163,7 @@ def run_calibration(
 
     # nested optimization function
     def opt_func(x):
-        # run FAVITES
+        # prep FAVITES run
         nonlocal iter_num; iter_num += 1
         curr_outdir = '%s/favites.output.%s' % (output, str(iter_num).zfill(3))
         makedirs(curr_outdir, exist_ok=True)
@@ -145,6 +192,12 @@ def run_calibration(
         ]
         if time_tree_only_include_mapped:
             run_favites_lite_command.append('--time_tree_only_include_mapped')
+
+        # add calibration parameters
+        for i in range(len(override_cli_args)):
+            exit(1) # TODO ADD CALIBRATION PARAMETERS
+
+        # run FAVITES
         run_favites_lite_command += [':::'] + rep_nums
         run_favites_lite_command += [':::'] + [str(rng_seed_base+int(v)) for v in rep_nums]
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
