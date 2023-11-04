@@ -83,38 +83,49 @@ def calc_link_proportions(genetic_network, abm_risk_factors):
     return link_counts
 
 # scoring function we want to optimize
-def score(sim_out_folder, calibration_csv, verbose=True):
+def score(sim_out_folder, calibration_csv, calibration_mode, verbose=True):
+    calibration_mode_parts = {v.strip().lower() for v in calibration_mode.split('+')}
     calibration_data = load_calibration_data(calibration_csv)
     abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % sim_out_folder)
     abm_risk_factors = load_abm_demographics_output('%s/abm_hiv_demographic_data.tsv' % sim_out_folder)
     mutation_tree = read_tree_newick('%s/error_free_files/phylogenetic_trees/merged_tree.tre' % sim_out_folder)
-    genetic_network = build_genetic_network(mutation_tree)
-    link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
+    genetic_network = None; link_proportions = None
     score = 0
     sim_start_time = int(sorted(k for k in calibration_data.keys() if re.match(r'[0-9]{4}_',k))[0].split('_')[0])
     print("Calibration Key\tReal Value\tSimulation Value")
     for cal_key, cal_tup in calibration_data.items():
         sim_val = None; cal_val, cal_w = cal_tup
-        if re.match(r'[0-9]{4}_', cal_key):
-            try:
-                year, risk = cal_key.split('_')
-                year = int(year)
-                risk = risk.replace(' & ', 'and')
-                if risk.lower() == 'other':
-                    risk = 'other' # 'other' is lowercase in the ABM R code output
-                sim_val = abm_calibration_data['newinfects_agg'][year-sim_start_time][risk]
-            except:
-                pass # sim_val will remain None, so ValueError below will be thrown
-        elif cal_key.startswith('Link_'):
-            risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
-            denominator = sum(link_proportions[risk_u].values())
-            if denominator == 0:
-                sim_val = 0
-            else:
-                sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
-        if sim_val is None:
-            raise ValueError("Unknown calibration key: %s" % cal_key)
-        else:
+        if 'epi' in calibration_mode_parts:
+            if re.match(r'[0-9]{4}_', cal_key):
+                try:
+                    year, risk = cal_key.split('_')
+                    year = int(year)
+                    risk = risk.replace(' & ', 'and')
+                    if risk.lower() == 'other':
+                        risk = 'other' # 'other' is lowercase in the ABM R code output
+                    sim_val = abm_calibration_data['newinfects_agg'][year-sim_start_time][risk]
+                except:
+                    raise ValueError("Unknown calibration key: %s" % cal_key)
+        if 'genetic' in calibration_mode_parts:
+            if mutation_tree is None: # only do this if I'm actually using the genetic data (because it's slow)
+                mutation_tree = read_tree_newick('%s/error_free_files/phylogenetic_trees/merged_tree.tre' % sim_out_folder)
+                genetic_network = build_genetic_network(mutation_tree)
+                link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
+            if cal_key.startswith('Link_'):
+                if genetic_network is None:
+                    genetic_network = build_genetic_network(mutation_tree)
+                if link_proportions is None:
+                    link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
+                try:
+                    risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
+                    denominator = sum(link_proportions[risk_u].values())
+                    if denominator == 0:
+                        sim_val = 0
+                    else:
+                        sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
+                except:
+                    raise ValueError("Unknown calibration key: %s" % cal_key)
+        if sim_val is not None:
             if verbose:
                 print("%s\t%s\t%s" % (cal_key, cal_val, sim_val))
             score += cal_w * ((sim_val-cal_val)**2)
@@ -125,10 +136,11 @@ def score(sim_out_folder, calibration_csv, verbose=True):
 
 # main execution
 if __name__ == "__main__":
-    if len(argv) != 3:
-        print("%s <sim_out_folder> <calibration_csv>" % argv[0]); exit(1)
+    if len(argv) != 4:
+        print("%s <sim_out_folder> <calibration_csv> <calibration_mode (epi/epi+genetic)>" % argv[0]); exit(1)
     if not isdir(argv[1]):
         print("Folder not found: %s" % argv[1]); exit(1)
     if not isfile(argv[2]):
         print("File not found: %s" % argv[2]); exit(1)
-    s = score(argv[1], argv[2])
+    argv[3] = argv[3].lower().strip()
+    s = score(argv[1], argv[2], argv[3])
