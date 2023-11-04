@@ -107,7 +107,11 @@ def score(sim_out_folder, calibration_csv, verbose=True):
                 pass # sim_val will remain None, so ValueError below will be thrown
         elif cal_key.startswith('Link_'):
             risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
-            sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
+            denominator = sum(link_proportions[risk_u].values())
+            if denominator == 0:
+                sim_val = 0
+            else:
+                sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
         if sim_val is None:
             raise ValueError("Unknown calibration key: %s" % cal_key)
         else:
