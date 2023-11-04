@@ -9,6 +9,7 @@ RUN apt-get update && apt-get -y upgrade && \
     pip3 install scipy && \
     pip3 install treesap && \
     pip3 install openpyxl && \
+    pip3 install networkx && \
     pip3 install treeswift && \
     pip3 install niemads && \
 
