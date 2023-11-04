@@ -22,9 +22,9 @@ def load_risk_factors(demographics_csv_fn):
             if row_num == 0:
                 for i, v in enumerate(row):
                     vup = v.strip().upper()
-                    if vup == 'UCI':
+                    if vup == 'UCSD_ID':
                         ind_ID = i
-                    elif vup == 'EXPOSURE CATEGORY':
+                    elif vup == 'RISK':
                         ind_risk = i
             else:
                 curr_risk_factor = row[ind_risk].strip()
@@ -53,6 +53,17 @@ def build_genetic_network(distances, risk_factors):
         nx.set_node_attributes(genetic_network, risk_factors[curr_risk_factor], curr_risk_factor)
     return genetic_network
 
+# calculate link proportions
+def calc_link_proportions(genetic_network, risk_factors):
+    risk_factor_labels = set(risk_factors.keys()) - {'all'}
+    link_counts = {u:{v:0 for v in risk_factor_labels} for u in risk_factor_labels}
+    for u, v in genetic_network.edges:
+        risk_u = [l for l in risk_factor_labels if risk_factors[l][u]][0]
+        risk_v = [l for l in risk_factor_labels if risk_factors[l][v]][0]
+        link_counts[risk_u][risk_v] += 1
+        link_counts[risk_v][risk_u] += 1
+    return link_counts
+
 # main execution
 if __name__ == "__main__":
     # parse args and load data
@@ -65,5 +76,9 @@ if __name__ == "__main__":
     # generate molecular linkage network
     distances = tree.distance_matrix(leaf_labels=True)
     genetic_network = build_genetic_network(distances, risk_factors)
-    for curr_risk_factor in risk_factors:
-        print("Assortativity (%s): %s" % (curr_risk_factor.capitalize(), nx.attribute_assortativity_coefficient(genetic_network, curr_risk_factor)))
+    link_proportions = calc_link_proportions(genetic_network, risk_factors)
+    for u in link_proportions:
+        for v in link_proportions[u]:
+            print("Link Proportion (%s-%s): %s" % (u, v, link_proportions[u][v]/sum(link_proportions[u].values())))
+    #for curr_risk_factor in risk_factors:
+    #    print("Assortativity (%s): %s" % (curr_risk_factor.capitalize(), nx.attribute_assortativity_coefficient(genetic_network, curr_risk_factor)))
