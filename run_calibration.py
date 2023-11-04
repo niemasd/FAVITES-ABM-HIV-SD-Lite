@@ -36,6 +36,7 @@ def parse_args():
     # arg parser
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-o', '--output', required=True, type=str, help="Output Directory")
+    parser.add_argument('--calibration_mode', required=True, type=str, help="Calibration Mode (epi, epi+genetic)")
     parser.add_argument('--calibration_csv', required=True, type=str, help="Calibration CSV")
     parser.add_argument('--sim_start_time', required=True, type=float, help="Simulation Start Time (year)")
     parser.add_argument('--abm_hiv_params_xlsx', required=True, type=str, help="abm_hiv-HRSA_SD: Parameter XLSX File")
@@ -137,21 +138,25 @@ def run_calibration(
         bounds.append((1, 2))
         override_cli_args.append('--abm_xlsx_msm_hiv_monthly_transmission_prob_mult')
 
-    if 'genetic' in calibration_mode_parts:
-        # heterosexual assortativity (risk)
-        x0.append(0.2)
-        bounds.append((0, 1))
-        override_cli_args.append('--abm_xlsx_het_assortativity_risk')
+        if 'genetic' in calibration_mode_parts:
+            # heterosexual assortativity (risk)
+            x0.append(0.2)
+            bounds.append((0, 1))
+            override_cli_args.append('--abm_xlsx_het_assortativity_risk')
 
-        # MSM assortativity (risk)
-        x0.append(0.2)
-        bounds.append((0, 1))
-        override_cli_args.append('--abm_xlsx_msm_assortativity_risk')
+            # MSM assortativity (risk)
+            x0.append(0.2)
+            bounds.append((0, 1))
+            override_cli_args.append('--abm_xlsx_msm_assortativity_risk')
 
-        # MSMW percentage of MSM who are MSMW
-        x0.append(0)
-        bounds.append((0, 1))
-        override_cli_args.append('--abm_xlsx_msmw_percentage_msm_msmw')
+            # MSMW percentage of MSM who are MSMW
+            x0.append(0)
+            bounds.append((0, 1))
+            override_cli_args.append('--abm_xlsx_msmw_percentage_msm_msmw')
+
+    # check for validity
+    if len(x0) == 0:
+        raise ValueError("Invalid calibration mode: %s" % calibration_mode)
 
     # prep calibration execution
     options = {
@@ -195,7 +200,7 @@ def run_calibration(
 
         # add calibration parameters
         for i in range(len(override_cli_args)):
-            exit(1) # TODO ADD CALIBRATION PARAMETERS
+            run_favites_lite_command += [override_cli_args[i], str(x[i])]
 
         # run FAVITES
         run_favites_lite_command += [':::'] + rep_nums
@@ -242,6 +247,7 @@ if __name__ == "__main__":
         args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
         args.mutation_rate_loc, args.mutation_rate_scale,
         args.num_reps_per_score, args.max_num_threads,
+        args.calibration_mode.lower().strip(),
         args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
         zip_output=args.zip_output,
     )

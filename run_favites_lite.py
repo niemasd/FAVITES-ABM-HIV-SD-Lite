@@ -249,7 +249,7 @@ def check_args(args):
     if args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult is not None and args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult < 0:
         raise ValueError("ABM XLSX MSM HIV Monthly Transmission Probability Between Partners Multiplier must be non-negative: %s" % args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult)
     if args.abm_xlsx_msmw_percentage_msm_msmw is not None and (args.abm_xlsx_msmw_percentage_msm_msmw < 0 or args.abm_xlsx_msmw_percentage_msm_msmw > 1):
-        raise ValueError("ABM XLSX MSMW Percentage of MSM who are MSMW must be in the range [0, 1]: %s" % args.abm_xlsx_msmw_percentage_msm_msmw
+        raise ValueError("ABM XLSX MSMW Percentage of MSM who are MSMW must be in the range [0, 1]: %s" % args.abm_xlsx_msmw_percentage_msm_msmw)
 
 # load abm_hiv-HRSA_SD sample time probabilities
 def load_sample_time_probs(sample_time_probs_fn, delim=','):
@@ -584,7 +584,7 @@ if __name__ == "__main__":
         print_log("Overriding ABM MSM HIV Monthly Transmission Probability Between Partners Multiplier: %s" % args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult)
         wb['Transmission + At-Risk Features']['D37'] = args.abm_xlsx_msm_hiv_monthly_transmission_prob_mult
     if args.abm_xlsx_msmw_percentage_msm_msmw is not None:
-        print_log("Overriding ABM MSMW Percentage of MSM who are MSMW: %s" % args.abm_xlsx_msmw_percentage_msm_msmw
+        print_log("Overriding ABM MSMW Percentage of MSM who are MSMW: %s" % args.abm_xlsx_msmw_percentage_msm_msmw)
         wb['Transmission + At-Risk Features']['D46'] = args.abm_xlsx_msmw_percentage_msm_msmw
 
     # fix data.xlsx and save
