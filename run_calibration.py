@@ -159,9 +159,6 @@ def run_calibration(
         raise ValueError("Invalid calibration mode: %s" % calibration_mode)
 
     # prep calibration execution
-    options = {
-        'maxiter': 2, # max number of iterations (TODO change from 1 to some other value; maybe function parameter with default value?)
-    }
     iter_num = 0
     run_favites_lite_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'run_favites_lite.py')
     score_simulation_output_path = '%s/%s' % ('/'.join(__file__.replace('/./','/').split('/')[:-1]), 'score_simulation_output.py')
@@ -223,7 +220,7 @@ def run_calibration(
         return score
 
     # run calibration
-    minimize(opt_func, x0, bounds=bounds, options=options)
+    minimize(opt_func, x0, bounds=bounds)
 
 # main execution
 if __name__ == "__main__":
