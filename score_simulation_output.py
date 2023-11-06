@@ -1,11 +1,32 @@
 #!/usr/bin/env python3
 from csv import reader
 from networkx import Graph
+from os import remove
 from os.path import isdir, isfile
-from sys import argv
 from treeswift import read_tree_newick
+import argparse
 import re
 GENETIC_LINKAGE_THRESHOLD = 0.015
+CALIBRATION_MODES = {'epi', 'epi+genetic'}
+
+# parse user args
+def parse_args():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('-s', '--simulation_folder', required=True, type=str, help="Simulation Output Folder")
+    parser.add_argument('-c', '--calibration_csv', required=True, type=str, help="Calibration Spreadsheet (CSV)")
+    parser.add_argument('-m', '--calibration_mode', required=True, type=str, help="Calibration Mode (%s)" % ', '.join(sorted(CALIBRATION_MODES)))
+    parser.add_argument('-o', '--output', required=False, type=str, default='stdout', help="Scoring Output")
+    args = parser.parse_args()
+    if not isdir(args.simulation_folder):
+        print("Folder not found: %s" % args.simulation_folder); exit(1)
+    if not isfile(args.calibration_csv):
+        print("File not found: %s" % args.calibration_csv); exit(1)
+    args.calibration_mode = args.calibration_mode.strip().lower()
+    if args.calibration_mode not in CALIBRATION_MODES:
+        print("Invalid calibration mode: %s" % args.calibration_mode); exit(1)
+    if isfile(args.output):
+        print("Output file exists: %s" % args.output); exit(1)
+    return args
 
 # load calibration data from CSV; calibration_data[description] = (value, weight)
 def load_calibration_data(calibration_csv):
@@ -83,7 +104,11 @@ def calc_link_proportions(genetic_network, abm_risk_factors):
     return link_counts
 
 # scoring function we want to optimize
-def score(sim_out_folder, calibration_csv, calibration_mode, verbose=True):
+def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=True):
+    if out_fn.strip().lower() == 'stdout':
+        from sys import stdout as out_f
+    else:
+        out_f = open(out_fn, 'w')
     calibration_mode_parts = {v.strip().lower() for v in calibration_mode.split('+')}
     calibration_data = load_calibration_data(calibration_csv)
     abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % sim_out_folder)
@@ -92,7 +117,7 @@ def score(sim_out_folder, calibration_csv, calibration_mode, verbose=True):
     genetic_network = None; link_proportions = None
     score = 0
     sim_start_time = int(sorted(k for k in calibration_data.keys() if re.match(r'[0-9]{4}_',k))[0].split('_')[0])
-    print("Calibration Key\tReal Value\tSimulation Value")
+    out_f.write("Calibration Key\tReal Value\tSimulation Value\n")
     for cal_key, cal_tup in calibration_data.items():
         sim_val = None; cal_val, cal_w = cal_tup
         if 'epi' in calibration_mode_parts:
@@ -127,20 +152,19 @@ def score(sim_out_folder, calibration_csv, calibration_mode, verbose=True):
                     raise ValueError("Unknown calibration key: %s" % cal_key)
         if sim_val is not None:
             if verbose:
-                print("%s\t%s\t%s" % (cal_key, cal_val, sim_val))
+                out_f.write("%s\t%s\t%s\n" % (cal_key, cal_val, sim_val))
             score += cal_w * ((sim_val-cal_val)**2)
     score = score**0.5
     if verbose:
-        print("Overall Calibration Score\tN/A\t%s" % score)
+        out_f.write("Overall Calibration Score\tN/A\t%s\n" % score)
     return score
 
 # main execution
 if __name__ == "__main__":
-    if len(argv) != 4:
-        print("%s <sim_out_folder> <calibration_csv> <calibration_mode (epi/epi+genetic)>" % argv[0]); exit(1)
-    if not isdir(argv[1]):
-        print("Folder not found: %s" % argv[1]); exit(1)
-    if not isfile(argv[2]):
-        print("File not found: %s" % argv[2]); exit(1)
-    argv[3] = argv[3].lower().strip()
-    s = score(argv[1], argv[2], argv[3])
+    args = parse_args()
+    try:
+        s = score(args.simulation_folder, args.calibration_csv, args.calibration_mode, args.output)
+    except Exception as e:
+        if isfile(args.output):
+            remove(args.output) # delete output file if crash
+        raise e
