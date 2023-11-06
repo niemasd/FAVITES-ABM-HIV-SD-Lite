@@ -203,16 +203,26 @@ def run_calibration(
         run_favites_lite_command += [':::'] + rep_nums
         run_favites_lite_command += [':::'] + [str(rng_seed_base+int(v)) for v in rep_nums]
         print_log("Running FAVITES iteration %d: %s" % (iter_num, ' '.join(run_favites_lite_command)))
-        o = check_output(run_favites_lite_command)
+        try:
+            o = check_output(run_favites_lite_command)
+        except:
+            print_log("WARNING: At least one run crashed in FAVITES iteration %d" % iter_num)
 
-        # calculate optimization function score TODO REFACTOR INTO OWN FUNCTION
+        # calculate optimization function score
         score_simulation_output_command = [
             'parallel', '--jobs', str(max_num_threads),
             score_simulation_output_path, '%s/{1}' % curr_outdir, calibration_csv, calibration_mode,
-            '>', '%s/{1}/score.txt' % curr_outdir,
+            '-o', '%s/{1}/score.txt' % curr_outdir,
         ] + [':::'] + rep_nums
         print_log("Calculating optimization function score: %s" % ' '.join(score_simulation_output_command))
-        check_output(score_simulation_output_command)
+        try:
+            check_output(score_simulation_output_command)
+        except:
+            print_log("WARNING: Failed to score at least one run in FAVITES iteration %d" % iter_num)
+        if len(list(glob('%s/*/score.txt' % curr_outdir))) == 0:
+            error_message = "All simulation replicates crashed in FAVITES iteration %d" % iter_num
+            print_log(error_message)
+            raise RuntimeError(error_message)
         score = mean(float(open(fn).read().split()[-1]) for fn in glob('%s/*/score.txt' % curr_outdir))
         print_log("FAVITES iteration %d average score: %s" % (iter_num, score))
         if zip_output:
