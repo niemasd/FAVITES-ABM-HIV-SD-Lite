@@ -153,8 +153,7 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
         if sim_val is not None:
             if verbose:
                 out_f.write("%s\t%s\t%s\n" % (cal_key, cal_val, sim_val))
-            score += cal_w * ((sim_val-cal_val)**2)
-    score = score**0.5
+            score += cal_w * abs(sim_val-cal_val)
     if verbose:
         out_f.write("Overall Calibration Score\tN/A\t%s\n" % score)
     return score
