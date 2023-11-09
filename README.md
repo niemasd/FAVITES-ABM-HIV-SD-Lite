@@ -19,5 +19,5 @@ rm -rf tmp && ./run_favites_lite.py -o tmp --abm_hiv_params_xlsx real_data/data_
 Running calibration:
 
 ```bash
-rm -rf tmp && ./run_calibration.py -o tmp --abm_hiv_params_xlsx real_data/data_11_02_2023.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv real_data/time_probs.csv --abm_hiv_sd_demographics_csv real_data/demogaphics_11_02_2023.csv --coatran_eff_pop_size 3000 --time_tree_seed real_data/timetree.nexus --mutation_rate_loc 0.00055 --mutation_rate_scale 0.0005 --time_tree_tmrca 1938.34 --sim_start_time 2019 --calibration_csv real_data/sd_calibration_old.csv --calibration_mode epi+genetic --zip_output
+rm -rf tmp && ./run_calibration.py -o tmp --abm_hiv_params_xlsx real_data/data_11_02_2023.xlsx --abm_hiv_trans_start .25 --abm_hiv_trans_end .5 --abm_hiv_trans_time 25 --sample_time_probs_csv real_data/time_probs.csv --abm_hiv_sd_demographics_csv real_data/demogaphics_11_02_2023.csv --coatran_eff_pop_size 3000 --time_tree_seed real_data/timetree.nexus --mutation_rate_loc 0.00055 --mutation_rate_scale 0.0005 --time_tree_tmrca 1938.34 --sim_start_time 2019 --calibration_csv real_data/sd_calibration.csv --calibration_mode epi+genetic --zip_output
 ```
