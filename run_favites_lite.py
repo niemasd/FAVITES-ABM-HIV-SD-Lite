@@ -13,6 +13,7 @@ from scipy.stats import truncexpon, truncnorm
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
+from time import mktime
 from treesap.NHPP import NHPP_first_interarrival_time
 from treeswift import Node, read_tree_newick, read_tree_nexus
 import argparse
@@ -393,9 +394,24 @@ def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim
         if node.is_root():
             node.time = time_tree_tmrca
         else:
-            node.time = node.parent.time
-            if node.edge_length is not None:
-                node.time += node.edge_length
+            # if the node has a label ending with _YYYYMMDD, use that as its time
+            try:
+                yyyymmdd = node.label.split('_')[-1]
+                curr_date = datetime.strptime(yyyymmdd, '%Y%m%d')
+                assert 1900 <= curr_date.year <= 2100
+                # logic from: https://stackoverflow.com/a/6451892/2134991
+                dt_curr_year_start = datetime(year=curr_date.year, month=1, day=1)
+                dt_next_year_start = datetime(year=curr_date.year+1, month=1, day=1)
+                year_elapsed = mktime(curr_date.timetuple()) - mktime(dt_curr_year_start.timetuple())
+                year_duration = mktime(dt_next_year_start.timetuple()) - mktime(dt_curr_year_start.timetuple())
+                year_elapsed_fraction = year_elapsed / year_duration
+                node.time = curr_date.year + year_elapsed_fraction
+
+            # otherwise, infer the node's time from its parent's time + incident branch length
+            except:
+                node.time = node.parent.time
+                if node.edge_length is not None:
+                    node.time += node.edge_length
 
     # set things up
     id_real_to_sim = {v:k for k,v in id_sim_to_real.items()}
