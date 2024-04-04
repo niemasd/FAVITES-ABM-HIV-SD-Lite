@@ -642,7 +642,7 @@ if __name__ == "__main__":
     else:
         time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
     f = open(time_tree_seed_copy_fn, 'w'); f.write(open(args.time_tree_seed).read()); f.close()
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT)
+    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")

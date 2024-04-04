@@ -151,7 +151,7 @@ def run_calibration(
 
             # MSMW percentage of MSM who are MSMW
             x0.append(0)
-            bounds.append((0, 1))
+            bounds.append((0, 0.2))
             override_cli_args.append('--abm_xlsx_msmw_percentage_msm_msmw')
 
     # check for validity
