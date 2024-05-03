@@ -524,7 +524,9 @@ def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, ver
     if verbose:
         print_log("Scaling time tree by sampling mutation rates...")
     nodes = [node for node in tree.traverse_preorder() if not node.is_root()]
-    rates = truncnorm.rvs(a=0, b=float('inf'), loc=mutation_rate_loc, scale=mutation_rate_scale, size=len(nodes))
+    # a = (a_min - loc) / scale = (0 - loc) / scale = -loc/scale
+    # b = (b_max - loc) / scale = (float('inf') - loc) / scale = float('inf') 
+    rates = truncnorm.rvs(a=-mutation_rate_loc/mutation_rate_scale, b=float('inf'), loc=mutation_rate_loc, scale=mutation_rate_scale, size=len(nodes))
     for i in range(max(len(nodes), len(rates))):
         nodes[i].edge_length *= rates[i]
     mut_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.tre' % outdir
