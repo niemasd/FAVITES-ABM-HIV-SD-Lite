@@ -2,14 +2,14 @@
 from datetime import datetime
 from math import exp
 from niemads import RandomSet
-from numpy.random import exponential
+from numpy.random import exponential, lognormal
 from openpyxl import load_workbook, Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Alignment
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
-from scipy.stats import truncexpon, truncnorm
+from scipy.stats import truncexpon
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
@@ -159,8 +159,8 @@ def parse_args():
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick/Nexus File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
-    parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
-    parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
+    parser.add_argument('--mutation_rate_mean', required=True, type=float, help="Mutation Rate: Log-Normal Mu (mutations/year)")
+    parser.add_argument('--mutation_rate_sigma', required=True, type=float, help="Mutation Rate: Log-Normal Sigma (mutations/year)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
@@ -517,16 +517,16 @@ def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim
             node.label = None
     return merged_time_tree
 
-def scale_tree(outdir, time_tree_fn, mutation_rate_loc, mutation_rate_scale, verbose=True):
+# `mean` and `sigma` are of the underlying Normal distribution of the log-Normal
+# https://numpy.org/doc/stable/reference/random/generated/numpy.random.lognormal.html
+def scale_tree(outdir, time_tree_fn, mutation_rate_mean, mutation_rate_sigma, verbose=True):
     if verbose:
         print_log("Reloading time tree...")
     tree = read_tree_newick(time_tree_fn)
     if verbose:
         print_log("Scaling time tree by sampling mutation rates...")
     nodes = [node for node in tree.traverse_preorder() if not node.is_root()]
-    # a = (a_min - loc) / scale = (0 - loc) / scale = -loc/scale
-    # b = (b_max - loc) / scale = (float('inf') - loc) / scale = float('inf') 
-    rates = truncnorm.rvs(a=-mutation_rate_loc/mutation_rate_scale, b=float('inf'), loc=mutation_rate_loc, scale=mutation_rate_scale, size=len(nodes))
+    rates = lognormal(mean=mutation_rate_mean, sigma=mutation_rate_sigma, size=len(nodes))
     for i in range(max(len(nodes), len(rates))):
         nodes[i].edge_length *= rates[i]
     mut_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.tre' % outdir
@@ -648,9 +648,9 @@ if __name__ == "__main__":
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
-    print_log("Mutation Rate Truncated Normal Location (mutations/month): %s" % args.mutation_rate_loc)
-    print_log("Mutation Rate Truncated Normal Scale (mutations/month): %s" % args.mutation_rate_scale)
+    print_log("Mutation Rate Log-Normal Underlying Mu (mutations/year): %s" % args.mutation_rate_mean)
+    print_log("Mutation Rate Log-Normal Underlying Sigma (mutations/year): %s" % args.mutation_rate_sigma)
     print_log()
     print_log("=== Mutation Tree Progress ===")
-    mut_tree_fn = scale_tree(args.output, time_tree_fn, args.mutation_rate_loc, args.mutation_rate_scale)
+    mut_tree_fn = scale_tree(args.output, time_tree_fn, args.mutation_rate_mean, args.mutation_rate_sigma)
     print_log("Mutation tree written to: %s" % mut_tree_fn)

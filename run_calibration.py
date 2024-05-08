@@ -49,8 +49,8 @@ def parse_args():
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
-    parser.add_argument('--mutation_rate_loc', required=True, type=float, help="Mutation Rate: Truncated Normal Location (mutations/month)")
-    parser.add_argument('--mutation_rate_scale', required=True, type=float, help="Mutation Rate: Truncated Normal Scale (mutations/month)")
+    parser.add_argument('--mutation_rate_mean', required=True, type=float, help="Mutation Rate: Log-Normal Mu (mutations/year)")
+    parser.add_argument('--mutation_rate_sigma', required=True, type=float, help="Mutation Rate: Log-Normal Sigma (mutations/year)")
     parser.add_argument('--num_reps_per_score', required=False, type=int, default=5, help="Number of replicates to run per scoring of a parameter set")
     parser.add_argument('--max_num_threads', required=False, type=int, default=cpu_count(), help="Max number of threads to use")
     parser.add_argument('--zip_output', action='store_true', help="Gzip Compress Output Files")
@@ -60,7 +60,7 @@ def parse_args():
     parser.add_argument('--version', action='store_true', help="Display Version")
     args = parser.parse_args()
 
-    # fix/update args and return
+    # fix/update args
     args.output = abspath(expanduser(args.output))
     args.calibration_csv = abspath(expanduser(args.calibration_csv))
     args.abm_hiv_params_xlsx = abspath(expanduser(args.abm_hiv_params_xlsx))
@@ -69,6 +69,11 @@ def parse_args():
     args.time_tree_seed = abspath(expanduser(args.time_tree_seed))
     args.path_abm_hiv_commandline = abspath(expanduser(args.path_abm_hiv_commandline))
     args.path_abm_hiv_modules = abspath(expanduser(args.path_abm_hiv_modules))
+
+    # check input files and return
+    for fn in [args.calibration_csv, args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.sample_time_probs_csv, args.time_tree_seed]:
+        if not isfile(fn):
+            raise ValueError("File not found: %s" % fn)
     return args
 
 # check user args (most will be checked by run_favites_lite.py)
@@ -98,7 +103,7 @@ def run_calibration(
         calibration_csv, output, sim_start_time,
         abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time,
         sample_time_probs_csv, coatran_eff_pop_size, time_tree_seed, time_tree_tmrca, time_tree_only_include_mapped,
-        mutation_rate_loc, mutation_rate_scale,
+        mutation_rate_mean, mutation_rate_sigma,
         num_reps_per_score, max_num_threads,
         calibration_mode, # "epi" or "epi+genetic"
         path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
@@ -185,8 +190,8 @@ def run_calibration(
             '--coatran_eff_pop_size', str(coatran_eff_pop_size),
             '--time_tree_seed', time_tree_seed,
             '--time_tree_tmrca', str(time_tree_tmrca),
-            '--mutation_rate_loc', str(mutation_rate_loc),
-            '--mutation_rate_scale', str(mutation_rate_scale),
+            '--mutation_rate_mean', str(mutation_rate_mean),
+            '--mutation_rate_sigma', str(mutation_rate_sigma),
             '--path_abm_hiv_commandline', path_abm_hiv_commandline,
             '--path_abm_hiv_modules', path_abm_hiv_modules,
             '--path_coatran_constant', path_coatran_constant,
@@ -255,10 +260,9 @@ if __name__ == "__main__":
         args.calibration_csv, args.output, args.sim_start_time,
         args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.abm_hiv_trans_start, args.abm_hiv_trans_end, args.abm_hiv_trans_time,
         args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
-        args.mutation_rate_loc, args.mutation_rate_scale,
+        args.mutation_rate_mean, args.mutation_rate_sigma,
         args.num_reps_per_score, args.max_num_threads,
         args.calibration_mode.lower().strip(),
         args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
         zip_output=args.zip_output,
     )
-    pass # TODO CONTINUE HERE
