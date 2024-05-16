@@ -187,6 +187,7 @@ def run_calibration(
             '--abm_hiv_trans_time', str(abm_hiv_trans_time),
             '--sample_time_probs_csv', sample_time_probs_csv,
             '--coatran_eff_pop_size', str(coatran_eff_pop_size),
+            '--mutation_tree_seed', mutation_tree_seed,
             '--time_tree_seed', time_tree_seed,
             '--time_tree_tmrca', str(time_tree_tmrca),
             '--path_abm_hiv_commandline', path_abm_hiv_commandline,
