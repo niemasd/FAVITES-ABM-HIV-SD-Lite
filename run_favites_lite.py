@@ -9,7 +9,7 @@ from openpyxl.styles import Alignment
 from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
-from scipy.stats import truncexpon
+from scipy.stats import gaussian_kde, truncexpon
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
@@ -54,6 +54,19 @@ def print_log(s='', end='\n'):
     print(tmp, end=end); stdout.flush()
     if LOGFILE is not None:
         print(tmp, file=LOGFILE, end=end); LOGFILE.flush()
+
+# load tree from file
+def load_tree(fn):
+    if fn.split('.')[-1].strip().lower() in {'nex', 'nexus'}:
+        tmp = read_tree_nexus(fn)
+        for k in ['taxlabels', 'translate']:
+            if k in tmp:
+                del tmp[k]
+        if len(tmp) != 1:
+            print("Nexus file must have exactly 1 tree: %s" % fn); exit(1)
+        return tmp[list(tmp.keys())[0]]
+    else:
+        return read_tree_newick(fn)
 
 # run abm_hiv-HRSA_SD
 def run_abm_hiv_hrsa_sd(outdir, abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time, path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, verbose=True):
@@ -366,10 +379,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
             time_trees[seed] = tree; break
     if verbose:
         print_log("Loading seed time tree: %s" % time_tree_seed_fn)
-    if time_tree_seed_fn.lower().endswith('.nex'):
-        seed_time_tree = list(read_tree_nexus(time_tree_seed_fn).values())[0]
-    else:
-        seed_time_tree = read_tree_newick(time_tree_seed_fn)
+    seed_time_tree = load_tree(time_tree_seed_fn)
 
     # merge time trees
     if verbose:
@@ -526,19 +536,30 @@ def merge_trees(outdir, seed_time_tree, time_trees, id_sim_to_real, time_tree_tm
     return merged_time_tree
 
 # sample mutation rates learned from the real time_RTT / mut_RTT distribution
-def scale_tree(outdir, time_tree_fn, real_time_tree_fn, real_mutation_tree_fn, verbose=True):
+def scale_tree(outdir, sim_time_tree_fn, real_time_tree_fn, real_mutation_tree_fn, verbose=True):
     if verbose:
         print_log("Reloading time tree...")
-    tree = read_tree_newick(time_tree_fn)
+    sim_tree = read_tree_newick(sim_time_tree_fn)
+    if verbose:
+        print_log("Loading real time and mutation trees...")
+    real_time_tree = load_tree(real_time_tree_fn)
+    real_mut_tree = load_tree(real_mutation_tree_fn)
+    if verbose:
+        print_log("Calculating time and mutation root-to-tip distances...")
+    time_root_dists = {node.label.strip():d for node,d in real_time_tree.distances_from_root(leaves=True, internal=False)}
+    mut_root_dists = {node.label.strip():d for node,d in real_mut_tree.distances_from_root(leaves=True, internal=False)}
+    rtt_mut_rates = [mut_root_dists[l] / time_root_dists[l] for l in set(time_root_dists.keys()) & set(mut_root_dists.keys())]
+    if verbose:
+        print_log("Learning mutation rate distribution from root-to-tip distances...")
+    mut_rate_dist = gaussian_kde(rtt_mut_rates)
     if verbose:
         print_log("Scaling time tree by sampling mutation rates...")
-    nodes = [node for node in tree.traverse_preorder() if not node.is_root()]
-    print("TODO GET MUTATION RATES"); exit(1)
-    #rates = lognormal(mean=mutation_rate_mean, sigma=mutation_rate_sigma, size=len(nodes)) # TODO
+    nodes = [node for node in sim_tree.traverse_preorder() if not node.is_root()]
+    rates = mut_rate_dist.resample(size=len(nodes))[0]
     for i in range(max(len(nodes), len(rates))):
         nodes[i].edge_length *= rates[i]
     mut_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.tre' % outdir
-    tree.write_tree_newick(mut_tree_fn)
+    sim_tree.write_tree_newick(mut_tree_fn)
     return mut_tree_fn
 
 # main execution
