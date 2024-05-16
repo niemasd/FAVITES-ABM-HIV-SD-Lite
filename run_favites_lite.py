@@ -16,6 +16,7 @@ from sys import argv, stdout
 from time import mktime
 from treesap.NHPP import NHPP_first_interarrival_time
 from treeswift import Node, read_tree_newick, read_tree_nexus
+from warnings import catch_warnings, simplefilter
 import argparse
 
 # useful constants
@@ -156,11 +157,10 @@ def parse_args():
     parser.add_argument('--abm_hiv_trans_time', required=True, type=float, help="abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate")
     parser.add_argument('--sample_time_probs_csv', required=True, type=str, help="Sample Time Probabilities (CSV)")
     parser.add_argument('--coatran_eff_pop_size', required=True, type=float, help="CoaTran (Constant): Effective Population Size")
+    parser.add_argument('--mutation_tree_seed', required=True, type=str, help="Mutation Tree: Seed (Newick/Nexus File)")
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick/Nexus File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
-    parser.add_argument('--mutation_rate_mean', required=True, type=float, help="Mutation Rate: Log-Normal Mu (mutations/year)")
-    parser.add_argument('--mutation_rate_sigma', required=True, type=float, help="Mutation Rate: Log-Normal Sigma (mutations/year)")
     parser.add_argument('--gzip_output', action='store_true', help="Gzip Compress Output Files")
     parser.add_argument('--path_abm_hiv_commandline', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_COMMANDLINE, help="Path to abm_hiv-HRSA_SD/abm_hiv_commandline.R")
     parser.add_argument('--path_abm_hiv_modules', required=False, type=str, default=DEFAULT_PATH_ABM_HIV_MODULES, help="Path to abm_hiv-HRSA_SD/modules")
@@ -375,7 +375,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     if verbose:
         print_log("Merging time trees into single time tree...")
     id_sim_to_real = {l.split('\t')[0].strip() : l.split('\t')[1].strip() for i,l in enumerate(open(id_map_fn)) if i != 0}
-    merged_time_tree = merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, only_include_mapped=only_include_mapped, verbose=verbose)
+    merged_time_tree = merge_trees(outdir, seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model=merge_model, only_include_mapped=only_include_mapped, verbose=verbose)
     if verbose:
         print_log("Suppressing unifurcations in merged time tree...")
     merged_time_tree.suppress_unifurcations()
@@ -383,7 +383,7 @@ def sample_time_tree(outdir, transmission_fn, sample_times_fn, id_map_fn, eff_po
     merged_time_tree.write_tree_newick(time_tree_fn)
     return time_tree_fn
 
-def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', only_include_mapped=False, verbose=True):
+def merge_trees(outdir, seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim_start_time, model='yule', only_include_mapped=False, verbose=True):
     # check that model is valid
     model = model.lower()
     if model not in {'yule', 'nhpp'}:
@@ -421,6 +421,14 @@ def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim
         sampled_seed_leaf_labels = {node.label for node in seed_time_tree.traverse_leaves() if node.time < sim_start_time}
     merged_time_tree = seed_time_tree.extract_tree_with(sampled_seed_leaf_labels) # currently just seed tree with unsampled seeds removed
     merged_time_tree.suppress_unifurcations()
+    for node in merged_time_tree.traverse_preorder():
+        for k in ['node_params', 'edge_params']:
+            if hasattr(node, k):
+                delattr(node, k)
+        if len(node.children) != 0:
+            node.label = None
+    base_time_tree_fn = '%s/error_free_files/phylogenetic_trees/base_tree.time.tre' % outdir
+    merged_time_tree.write_tree_newick(base_time_tree_fn)
     merged_time_tree_rtt = {node:dist for node, dist in merged_time_tree.distances_from_root(leaves=True, internal=False, unlabeled=True, weighted=True)}
     seed_to_seed_leaf = {id_real_to_sim[node.label.split('_')[0].strip()]:node for node in merged_time_tree.traverse_leaves() if node.label.split('_')[0].strip() in id_real_to_sim}
     seeds_with_leaves = set(seed_to_seed_leaf.keys())
@@ -517,16 +525,16 @@ def merge_trees(seed_time_tree, time_trees, id_sim_to_real, time_tree_tmrca, sim
             node.label = None
     return merged_time_tree
 
-# `mean` and `sigma` are of the underlying Normal distribution of the log-Normal
-# https://numpy.org/doc/stable/reference/random/generated/numpy.random.lognormal.html
-def scale_tree(outdir, time_tree_fn, mutation_rate_mean, mutation_rate_sigma, verbose=True):
+# sample mutation rates learned from the real time_RTT / mut_RTT distribution
+def scale_tree(outdir, time_tree_fn, real_time_tree_fn, real_mutation_tree_fn, verbose=True):
     if verbose:
         print_log("Reloading time tree...")
     tree = read_tree_newick(time_tree_fn)
     if verbose:
         print_log("Scaling time tree by sampling mutation rates...")
     nodes = [node for node in tree.traverse_preorder() if not node.is_root()]
-    rates = lognormal(mean=mutation_rate_mean, sigma=mutation_rate_sigma, size=len(nodes))
+    print("TODO GET MUTATION RATES"); exit(1)
+    #rates = lognormal(mean=mutation_rate_mean, sigma=mutation_rate_sigma, size=len(nodes)) # TODO
     for i in range(max(len(nodes), len(rates))):
         nodes[i].edge_length *= rates[i]
     mut_tree_fn = '%s/error_free_files/phylogenetic_trees/merged_tree.tre' % outdir
@@ -644,13 +652,14 @@ if __name__ == "__main__":
     else:
         time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
     f = open(time_tree_seed_copy_fn, 'w'); f.write(open(args.time_tree_seed).read()); f.close()
-    time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
+    with catch_warnings():
+        simplefilter("ignore")
+        time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
     print_log("Time tree written to: %s" % time_tree_fn)
     print_log()
     print_log("=== Mutation Tree Arguments ===")
-    print_log("Mutation Rate Log-Normal Underlying Mu (mutations/year): %s" % args.mutation_rate_mean)
-    print_log("Mutation Rate Log-Normal Underlying Sigma (mutations/year): %s" % args.mutation_rate_sigma)
+    print_log("Seed Mutation Tree: %s" % args.mutation_tree_seed)
     print_log()
     print_log("=== Mutation Tree Progress ===")
-    mut_tree_fn = scale_tree(args.output, time_tree_fn, args.mutation_rate_mean, args.mutation_rate_sigma)
+    mut_tree_fn = scale_tree(args.output, time_tree_fn, args.time_tree_seed, args.mutation_tree_seed)
     print_log("Mutation tree written to: %s" % mut_tree_fn)
