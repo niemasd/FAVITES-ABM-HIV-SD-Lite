@@ -22,7 +22,7 @@ def load_risk_factors(demographics_csv_fn):
             if row_num == 0:
                 for i, v in enumerate(row):
                     vup = v.strip().upper()
-                    if vup == 'UCSD_ID':
+                    if vup in {'UCSD_ID', 'UCI'}:
                         ind_ID = i
                     elif vup == 'RISK':
                         ind_risk = i
