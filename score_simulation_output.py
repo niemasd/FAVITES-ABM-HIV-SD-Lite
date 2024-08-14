@@ -68,7 +68,7 @@ def load_abm_demographics_output(abm_demographics_tsv):
     return risk_factors
 
 # build genetic linkage network from distance matrix
-def build_genetic_network(mutation_tree):
+def build_genetic_network(mutation_tree, only_new=True):
     distances = mutation_tree.distance_matrix(leaf_labels=True)
     leaf_labels = [node.label for node in mutation_tree.traverse_leaves()]
     genetic_network = Graph()
@@ -76,7 +76,7 @@ def build_genetic_network(mutation_tree):
         ul = leaf_labels[i]; u = ul.split('_')[0].strip()
         for j in range(i+1, len(leaf_labels)):
             vl = leaf_labels[j]; v = vl.split('_')[0].strip(); d = distances[ul][vl]
-            if d <= GENETIC_LINKAGE_THRESHOLD:
+            if d <= GENETIC_LINKAGE_THRESHOLD and ((not only_new) or ('|' in ul or '|' in vl)):
                 genetic_network.add_edge(u, v, weight=d)
     return genetic_network
 
@@ -115,6 +115,7 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
     abm_risk_factors = load_abm_demographics_output('%s/abm_hiv_demographic_data.tsv' % sim_out_folder)
     mutation_tree = read_tree_newick('%s/error_free_files/phylogenetic_trees/merged_tree.tre' % sim_out_folder)
     genetic_network = None; link_proportions = None
+    genetic_network_new = None; link_proportions_new = None
     score = 0
     sim_start_time = int(sorted(k for k in calibration_data.keys() if re.match(r'[0-9]{4}_',k))[0].split('_')[0])
     out_f.write("Calibration Key\tReal Value\tSimulation Value\n")
@@ -148,6 +149,20 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
                         sim_val = 0
                     else:
                         sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
+                except:
+                    raise ValueError("Unknown calibration key: %s" % cal_key)
+            if cal_key.startswith('NewLink_'):
+                if genetic_network_new is None:
+                    genetic_network_new = build_genetic_network(mutation_tree, only_new=True)
+                if link_proportions_new is None:
+                    link_proportions_new = calc_link_proportions(genetic_network_new, abm_risk_factors)
+                try:
+                    risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
+                    denominator = sum(link_proportions_new[risk_u].values())
+                    if denominator == 0:
+                        sim_val = 0
+                    else:
+                        sim_val = link_proportions_new[risk_u][risk_v] / sum(link_proportions_new[risk_u].values())
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
         if sim_val is not None:
