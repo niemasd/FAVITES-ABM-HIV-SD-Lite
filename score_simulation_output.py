@@ -68,7 +68,7 @@ def load_abm_demographics_output(abm_demographics_tsv):
     return risk_factors
 
 # build genetic linkage network from distance matrix
-def build_genetic_network(mutation_tree, only_new=True):
+def build_genetic_network(mutation_tree, only_new=False):
     distances = mutation_tree.distance_matrix(leaf_labels=True)
     leaf_labels = [node.label for node in mutation_tree.traverse_leaves()]
     genetic_network = Graph()
@@ -133,13 +133,9 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
         if 'genetic' in calibration_mode_parts:
-            if mutation_tree is None: # only do this if I'm actually using the genetic data (because it's slow)
-                mutation_tree = read_tree_newick('%s/error_free_files/phylogenetic_trees/merged_tree.tre' % sim_out_folder)
-                genetic_network = build_genetic_network(mutation_tree)
-                link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
             if cal_key.startswith('Link_'):
                 if genetic_network is None:
-                    genetic_network = build_genetic_network(mutation_tree)
+                    genetic_network = build_genetic_network(mutation_tree, only_new=False)
                 if link_proportions is None:
                     link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
                 try:
