@@ -24,7 +24,7 @@ def load_risk_factors(demographics_csv_fn):
                     vup = v.strip().upper()
                     if vup in {'UCSD_ID', 'UCI'}:
                         ind_ID = i
-                    elif vup == 'RISK':
+                    elif vup in {'RISK', 'RISK_MT'}:
                         ind_risk = i
             else:
                 curr_risk_factor = row[ind_risk].strip()
@@ -38,14 +38,14 @@ def load_risk_factors(demographics_csv_fn):
     return risk_factors
 
 # build genetic linkage network from distance matrix
-def build_genetic_network(distances, risk_factors):
+def build_genetic_network(distances, risk_factors, start_year=0, only_new=False):
     # build genetic linkage network
     genetic_network = nx.Graph()
     for i in range(len(leaf_labels)-1):
-        ul = leaf_labels[i]; u = ul.split('_')[0].strip()
+        ul = leaf_labels[i]; u = ul.split('_')[0].strip(); uy = int(ul.split('_')[1].strip())
         for j in range(i+1, len(leaf_labels)):
-            vl = leaf_labels[j]; v = vl.split('_')[0].strip(); d = distances[ul][vl]
-            if d <= GENETIC_LINKAGE_THRESHOLD:
+            vl = leaf_labels[j]; v = vl.split('_')[0].strip(); vy = int(vl.split('_')[1].strip()); d = distances[ul][vl]
+            if d <= GENETIC_LINKAGE_THRESHOLD and ((not only_new) or (uy >= start_year or vy >= start_year)):
                 genetic_network.add_edge(u, v, weight=d)
 
     # label nodes with risk factors and return
@@ -67,18 +67,22 @@ def calc_link_proportions(genetic_network, risk_factors):
 # main execution
 if __name__ == "__main__":
     # parse args and load data
-    if len(argv) != 3:
-        print("USAGE: %s <newick_mutation_tree> <demographics_csv>" % argv[0]); exit(1)
+    if len(argv) != 4:
+        print("USAGE: %s <newick_mutation_tree> <demographics_csv> <start_year>" % argv[0]); exit(1)
     tree = read_tree_newick(argv[1])
     risk_factors = load_risk_factors(argv[2])
+    start_year = int(argv[3])
     leaf_labels = [node.label for node in tree.traverse_leaves()]
 
     # generate molecular linkage network
     distances = tree.distance_matrix(leaf_labels=True)
-    genetic_network = build_genetic_network(distances, risk_factors)
+    genetic_network = build_genetic_network(distances, risk_factors, only_new=False)
     link_proportions = calc_link_proportions(genetic_network, risk_factors)
+    genetic_network_new = build_genetic_network(distances, risk_factors, start_year=start_year, only_new=True)
+    link_proportions_new = calc_link_proportions(genetic_network_new, risk_factors)
     for u in link_proportions:
         for v in link_proportions[u]:
             print("Link Proportion (%s-%s): %s" % (u, v, link_proportions[u][v]/sum(link_proportions[u].values())))
-    #for curr_risk_factor in risk_factors:
-    #    print("Assortativity (%s): %s" % (curr_risk_factor.capitalize(), nx.attribute_assortativity_coefficient(genetic_network, curr_risk_factor)))
+    for u in link_proportions_new:
+        for v in link_proportions_new[u]:
+            print("New Link Proportion (%s-%s): %s" % (u, v, link_proportions_new[u][v]/sum(link_proportions_new[u].values())))
