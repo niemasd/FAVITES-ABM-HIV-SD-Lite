@@ -3,7 +3,10 @@ FROM ubuntu:20.04
 
 # Set up environment and install dependencies
 RUN apt-get update && apt-get -y upgrade && \
-    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y cmake libcurl4-openssl-dev libssl-dev libxml2-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev git parallel python3 python3-pip r-base-core wget && \
+    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y --no-install-recommends software-properties-common dirmngr wget && \
+    wget -qO- "https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc" >> "/etc/apt/trusted.gpg.d/cran_ubuntu_key.asc" && \
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
+    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends cmake g++ git libcurl4-openssl-dev libssl-dev libxml2-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev make parallel python3 python3-pip r-base-core && \
 
     # Install required Python packages
     pip3 install scipy && \
@@ -14,8 +17,8 @@ RUN apt-get update && apt-get -y upgrade && \
     pip3 install niemads && \
 
     # Install required R packages
+    R -e "withCallingHandlers(install.packages('devtools'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('gtools'), warning = function(w) stop(w))" && \
-    R -e "withCallingHandlers(install.packages('ensurer'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('truncnorm'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('assertthat'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('rlang'), warning = function(w) stop(w))" && \
@@ -25,6 +28,7 @@ RUN apt-get update && apt-get -y upgrade && \
     R -e "withCallingHandlers(install.packages('fastRG'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('mice')" && \
     R -e "update.packages()" && \
+    R -e "require(devtools); withCallingHandlers(install_version('ensurer', version = '1.1', repos = 'http://cran.us.r-project.org'), warning = function(w) stop(w))" && \
 
     # Install abm_hiv-HRSA_SD
     wget -q https://github.com/mathematica-pub/abm_hiv/archive/refs/heads/HRSA_SD.zip && \
