@@ -6,7 +6,7 @@ RUN apt-get update && apt-get -y upgrade && \
     DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt install -y --no-install-recommends software-properties-common dirmngr wget && \
     wget -qO- "https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc" >> "/etc/apt/trusted.gpg.d/cran_ubuntu_key.asc" && \
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
-    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends cmake g++ gfortran git libcurl4-openssl-dev libssl-dev libxml2-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev make parallel python3 python3-pip r-base-core && \
+    DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get install -y --no-install-recommends cmake g++ gfortran git libcurl4-openssl-dev liblapack-dev libopenblas-dev libssl-dev libxml2-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev make parallel python3 python3-pip r-base-core && \
 
     # Install required Python packages
     pip3 install scipy && \
