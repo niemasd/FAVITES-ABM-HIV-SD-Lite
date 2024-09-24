@@ -14,16 +14,16 @@ RUN apt-get update && apt-get -y upgrade && \
     pip3 install niemads && \
 
     # Install required R packages
-    R -e "install.packages('gtools')" && \
-    R -e "install.packages('ensurer')" && \
-    R -e "install.packages('truncnorm')" && \
-    R -e "install.packages('assertthat')" && \
-    R -e "install.packages('rlang')" && \
-    R -e "install.packages('readxl')" && \
-    R -e "install.packages('tidyverse')" && \
-    R -e "install.packages('tictoc')" && \
-    R -e "install.packages('fastRG')" && \
-    R -e "install.packages('mice')" && \
+    R -e "withCallingHandlers(install.packages('gtools'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('ensurer'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('truncnorm'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('assertthat'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('rlang'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('readxl'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('tidyverse'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('tictoc'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('fastRG'), warning = function(w) stop(w))" && \
+    R -e "withCallingHandlers(install.packages('mice')" && \
     R -e "update.packages()" && \
 
     # Install abm_hiv-HRSA_SD
