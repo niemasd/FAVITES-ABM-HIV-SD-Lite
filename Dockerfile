@@ -26,7 +26,7 @@ RUN apt-get update && apt-get -y upgrade && \
     R -e "withCallingHandlers(install.packages('tidyverse'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('tictoc'), warning = function(w) stop(w))" && \
     R -e "withCallingHandlers(install.packages('fastRG'), warning = function(w) stop(w))" && \
-    R -e "withCallingHandlers(install.packages('mice')" && \
+    R -e "withCallingHandlers(install.packages('mice'), warning = function(w) stop(w))" && \
     R -e "update.packages()" && \
     R -e "require(devtools); withCallingHandlers(install_version('ensurer', version = '1.1', repos = 'http://cran.us.r-project.org'), warning = function(w) stop(w))" && \
 
