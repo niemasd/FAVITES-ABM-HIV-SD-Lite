@@ -121,7 +121,10 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
     out_f.write("Calibration Key\tReal Value\tSimulation Value\n")
     for cal_key, cal_tup in calibration_data.items():
         sim_val = None; cal_val, cal_w = cal_tup
+
+        # epi-specific calibration metrics
         if 'epi' in calibration_mode_parts:
+            # YYYY_* calibration metrics
             if re.match(r'[0-9]{4}_', cal_key):
                 try:
                     year, risk = cal_key.split('_')
@@ -132,7 +135,10 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
                     sim_val = abm_calibration_data['newinfects_agg'][year-sim_start_time][risk]
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
+
+        # genetic-specific calibration metrics
         if 'genetic' in calibration_mode_parts:
+            # Link_* calibration metrics = genetic linkages
             if cal_key.startswith('Link_'):
                 if genetic_network is None:
                     genetic_network = build_genetic_network(mutation_tree, only_new=False)
@@ -147,6 +153,8 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
                         sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
+
+            # NewLink_* calibration metrics = new genetic linkages
             if cal_key.startswith('NewLink_'):
                 if genetic_network_new is None:
                     genetic_network_new = build_genetic_network(mutation_tree, only_new=True)
