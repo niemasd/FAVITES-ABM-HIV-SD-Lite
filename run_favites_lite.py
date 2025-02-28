@@ -23,7 +23,6 @@ import argparse
 VERSION = '0.0.1'
 LOGFILE = None
 SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'race', 'agerange', 'timetype', 'probability']
-DEMOGRAPHICS_COLUMNS = ['id', 'gender', 'risk', 'age', 'race']
 AGE_RANGES = ['13-24', '25-54', '55-100']
 AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AGE_RANGES]
 NHPP_RATE_FUNC = lambda t: exp(-t**2)+1
@@ -293,21 +292,16 @@ def load_demographics(demographic_fn, delim='\t'):
         if header:
             header = False
             colnames = parts; name_to_ind = {colname:i for i,colname in enumerate(colnames)}
-            for colname in DEMOGRAPHICS_COLUMNS:
+            for colname in ['id', 'age']:
                 if colname not in name_to_ind:
                     raise ValueError("Demographic data output by abm_hiv-HRSA_SD does not have a column called '%s': %s" % (colname,demographic_fn))
         else:
             ID = parts[name_to_ind['id']]
             if ID in demographics:
                 raise ValueError("Duplicate ID encountered in demographics file: %s" % ID)
-            vals = {colname:parts[name_to_ind[colname]] for colname in DEMOGRAPHICS_COLUMNS[1:]} # [1:] to skip 'id'
-            end_age = float(vals['age'])
-            demographics[ID] = { # 'gender', 'risk', 'agerange', 'race'
-                'gender': vals['gender'],
-                'risk': vals['risk'],
-                'race': vals['race'],
-                'end_age': end_age,
-            }
+            demographics[ID] = {colname:parts[name_to_ind[colname]] for colname in name_to_ind if colname != 'id'}
+            if 'age' in demographics[ID]: # end age
+                demographics[ID]['age'] = float(demographics[ID]['age'])
     return demographics
 
 # get sample times from all possible times
@@ -326,7 +320,7 @@ def sample_times_from_all_times(outdir, sim_duration, demographic_fn, all_times_
                 raise KeyError("ID not found in demographic data: %s" % ID)
             demo = demographics[ID]
             k = [demo[colname] for colname in SAMPLE_TIME_PROB_COLUMNS[:-3]] # [:-2] to skip 'agerange', 'timetype', and 'probability
-            age = int(demo['end_age'] + t - sim_duration) # cast to int to round down
+            age = int(demo['age'] + t - sim_duration) # cast to int to round down
             agerange = None
             for ind, curr_range in enumerate(AGE_RANGES_FLOAT):
                 if curr_range[0] <= age <= curr_range[1]:
