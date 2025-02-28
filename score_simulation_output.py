@@ -44,28 +44,37 @@ def load_calibration_data(calibration_csv):
 def load_abm_calibration_output(abm_calibration_tsv):
     data = dict()
     for row in reader(open(abm_calibration_tsv), delimiter='\t'):
-        metric, month, subgroup, stat = [x.strip() for x in row]
+        metric, demographic, month, subgroup, stat = [x.strip() for x in row]
         if metric.lower() == 'metric':
             continue # skip header row
         if metric not in data:
             data[metric] = dict()
-        year = int(month) // 12
-        if year not in data[metric]:
-            data[metric][year] = dict()
-        if subgroup not in data[metric][year]:
-            data[metric][year][subgroup] = 0
-        data[metric][year][subgroup] += int(stat)
+        if demographic not in data[metric]:
+            data[metric][demographic] = dict()
+        year = (int(month) - 1) // 12
+        if year not in data[metric][demographic]:
+            data[metric][demographic][year] = dict()
+        if subgroup not in data[metric][demographic][year]:
+            data[metric][demographic][year][subgroup] = 0
+        data[metric][demographic][year][subgroup] += int(stat)
     return data
 
 # load demographic data output by the ABM R code
 def load_abm_demographics_output(abm_demographics_tsv):
-    risk_factors = dict()
+    demographics = dict()
+    header = True
     for row in reader(open(abm_demographics_tsv), delimiter='\t'):
-        ID, gender, risk, age, race = [x.strip() for x in row]
-        if ID == 'id':
-            continue # skip header row
-        risk_factors[ID] = risk.upper()
-    return risk_factors
+        if header:
+            header = False
+            name_to_ind = {colname:i for i,colname in enumerate(row)}
+        else:
+            ID = row[name_to_ind['id']]
+            if ID in demographics:
+                raise ValueError("Duplicate ID encountered in demographics file: %s" % ID)
+            demographics[ID] = {colname:row[name_to_ind[colname]] for colname in name_to_ind if colname != 'id'}
+            if 'age' in demographics[ID]: # end age
+                demographics[ID]['age'] = float(demographics[ID]['age'])
+    return demographics
 
 # build genetic linkage network from distance matrix
 def build_genetic_network(mutation_tree, only_new=False):
@@ -81,26 +90,26 @@ def build_genetic_network(mutation_tree, only_new=False):
     return genetic_network
 
 # calculate link proportions
-def calc_link_proportions(genetic_network, abm_risk_factors):
-    risk_factor_labels = set(abm_risk_factors.values())
-    link_counts = {u:{v:0 for v in risk_factor_labels} for u in risk_factor_labels}
+def calc_link_proportions(genetic_network, abm_demographics, stratify_demographic):
+    demographic_subgroups = {dems[stratify_demographic] for dems in abm_demographics.values()}
+    link_counts = {u:{v:0 for v in demographic_subgroups} for u in demographic_subgroups}
     for u, v in genetic_network.edges:
         if '|' in u:
-            risk_u = abm_risk_factors[u.split('|')[1]]
+            subgroup_u = abm_demographics[u.split('|')[1]][stratify_demographic]
         else:
             try:
-                risk_u = abm_risk_factors[u.split('_')[0]]
+                subgroup_u = abm_demographics[u.split('_')[0]][stratify_demographic]
             except:
                 continue
         if '|' in v:
-            risk_v = abm_risk_factors[v.split('|')[1]]
+            subgroup_v = abm_demographics[v.split('|')[1]][stratify_demographic]
         else:
             try:
-                risk_v = abm_risk_factors[v.split('_')[0]]
+                subgroup_v = abm_demographics[v.split('_')[0]][stratify_demographic]
             except:
                 continue
-        link_counts[risk_u][risk_v] += 1
-        link_counts[risk_v][risk_u] += 1
+        link_counts[subgroup_u][subgroup_v] += 1
+        link_counts[subgroup_v][subgroup_u] += 1
     return link_counts
 
 # scoring function we want to optimize
@@ -112,10 +121,10 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
     calibration_mode_parts = {v.strip().lower() for v in calibration_mode.split('+')}
     calibration_data = load_calibration_data(calibration_csv)
     abm_calibration_data = load_abm_calibration_output('%s/abm_hiv_calibration_data.tsv' % sim_out_folder)
-    abm_risk_factors = load_abm_demographics_output('%s/abm_hiv_demographic_data.tsv' % sim_out_folder)
+    abm_demographics = load_abm_demographics_output('%s/abm_hiv_demographic_data.tsv' % sim_out_folder)
     mutation_tree = read_tree_newick('%s/error_free_files/phylogenetic_trees/merged_tree.tre' % sim_out_folder)
-    genetic_network = None; link_proportions = None
-    genetic_network_new = None; link_proportions_new = None
+    genetic_network = None; link_proportions = dict()
+    genetic_network_new = None; link_proportions_new = dict()
     score = 0
     sim_start_time = int(sorted(k for k in calibration_data.keys() if re.match(r'[0-9]{4}_',k))[0].split('_')[0])
     out_f.write("Calibration Key\tReal Value\tSimulation Value\n")
@@ -127,12 +136,9 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
             # YYYY_* calibration metrics
             if re.match(r'[0-9]{4}_', cal_key):
                 try:
-                    year, risk = cal_key.split('_')
+                    year, demographic, subgroup = cal_key.split('_') # e.g. 2019_race_black
                     year = int(year)
-                    risk = risk.replace(' & ', 'and')
-                    if risk.lower() == 'other':
-                        risk = 'other' # 'other' is lowercase in the ABM R code output
-                    sim_val = abm_calibration_data['newinfects_agg'][year-sim_start_time][risk]
+                    sim_val = abm_calibration_data['newinfects_agg'][demographic][year-sim_start_time][subgroup]
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
 
@@ -140,33 +146,33 @@ def score(sim_out_folder, calibration_csv, calibration_mode, out_fn, verbose=Tru
         if 'genetic' in calibration_mode_parts:
             # Link_* calibration metrics = genetic linkages
             if cal_key.startswith('Link_'):
+                DUMMY, demographic, uv = cal_key.split('_'); subgroup_u, subgroup_v = [x.strip() for x in uv.split('-')]
                 if genetic_network is None:
                     genetic_network = build_genetic_network(mutation_tree, only_new=False)
-                if link_proportions is None:
-                    link_proportions = calc_link_proportions(genetic_network, abm_risk_factors)
+                if demographic not in link_proportions:
+                    link_proportions[demographic] = calc_link_proportions(genetic_network, abm_demographics, demographic)
                 try:
-                    risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
-                    denominator = sum(link_proportions[risk_u].values())
+                    denominator = sum(link_proportions[demographic][subgroup_u].values())
                     if denominator == 0:
                         sim_val = 0
                     else:
-                        sim_val = link_proportions[risk_u][risk_v] / sum(link_proportions[risk_u].values())
+                        sim_val = link_proportions[demographic][subgroup_u][subgroup_v] / sum(link_proportions[subgroup_u].values())
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
 
             # NewLink_* calibration metrics = new genetic linkages
             if cal_key.startswith('NewLink_'):
+                DUMMY, demographic, uv = cal_key.split('_'); subgroup_u, subgroup_v = [x.strip() for x in uv.split('-')]
                 if genetic_network_new is None:
                     genetic_network_new = build_genetic_network(mutation_tree, only_new=True)
-                if link_proportions_new is None:
-                    link_proportions_new = calc_link_proportions(genetic_network_new, abm_risk_factors)
+                if demographic not in link_proportions_new:
+                    link_proportions_new[demographic] = calc_link_proportions(genetic_network_new, abm_demographics, demographic)
                 try:
-                    risk_u, risk_v = [x.strip().upper() for x in cal_key.split('_')[1].split('-')]
-                    denominator = sum(link_proportions_new[risk_u].values())
+                    denominator = sum(link_proportions_new[demographic][subgroup_u].values())
                     if denominator == 0:
                         sim_val = 0
                     else:
-                        sim_val = link_proportions_new[risk_u][risk_v] / sum(link_proportions_new[risk_u].values())
+                        sim_val = link_proportions_new[demographic][subgroup_u][subgroup_v] / sum(link_proportions_new[demographic][subgroup_u].values())
                 except:
                     raise ValueError("Unknown calibration key: %s" % cal_key)
         if sim_val is not None:
