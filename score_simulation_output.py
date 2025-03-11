@@ -31,10 +31,10 @@ def parse_args():
 # load calibration data from CSV; calibration_data[description] = (value, weight)
 def load_calibration_data(calibration_csv):
     calibration_data = dict()
-    for row in reader(open(calibration_csv)):
-        d, v, w = [x.strip() for x in row]
-        if d.lower() == 'description':
+    for row_num, row in enumerate(reader(open(calibration_csv))):
+        if row_num == 0:
             continue # skip header row
+        d, v, w = [x.strip() for x in row]
         if d in calibration_data:
             raise ValueError("Duplicate entry in calibration CSV: %s" % d)
         calibration_data[d] = (float(v), float(w))
