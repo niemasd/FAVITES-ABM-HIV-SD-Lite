@@ -23,7 +23,7 @@ import argparse
 VERSION = '0.0.1'
 LOGFILE = None
 SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'race', 'agerange', 'timetype', 'probability']
-AGE_RANGES = ['13-24', '25-54', '55-100']
+AGE_RANGES = ['0-24', '25-54', '55-999']
 AGE_RANGES_FLOAT = [(float(v.split('-')[0]), float(v.split('-')[1])) for v in AGE_RANGES]
 NHPP_RATE_FUNC = lambda t: exp(-t**2)+1
 NHPP_EXP_RTT = 5.010476661748763
