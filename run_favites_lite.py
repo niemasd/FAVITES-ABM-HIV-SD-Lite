@@ -196,6 +196,7 @@ def parse_args():
     args.abm_hiv_sd_demographics_csv = abspath(expanduser(args.abm_hiv_sd_demographics_csv))
     args.sample_time_probs_csv = abspath(expanduser(args.sample_time_probs_csv))
     args.time_tree_seed = abspath(expanduser(args.time_tree_seed))
+    args.mutation_tree_seed = abspath(expanduser(args.mutation_tree_seed))
     args.path_abm_hiv_commandline = abspath(expanduser(args.path_abm_hiv_commandline))
     args.path_abm_hiv_modules = abspath(expanduser(args.path_abm_hiv_modules))
     return args
@@ -238,9 +239,13 @@ def check_args(args):
     if not isdir(args.path_abm_hiv_modules):
         raise ValueError("abm_hiv-HRSA_SD/modules not found: %s" % args.path_abm_hiv_modules)
 
-    # check seed real tree
+    # check seed real time tree
     if not isfile(args.time_tree_seed):
-        raise ValueError("Seed time tree Newick file not found: %s" % args.time_tree_seed)
+        raise ValueError("Seed time tree file not found: %s" % args.time_tree_seed)
+
+    # check seed real mutation tree
+    if not isfile(args.mutation_tree_seed):
+        raise ValueError("Seed mutation tree file not found: %s" % args.mutation_tree_seed)
 
     # check tMRCA
     if args.time_tree_tmrca < 0:
@@ -661,19 +666,21 @@ if __name__ == "__main__":
     print_log("Seed Time Tree: %s" % args.time_tree_seed)
     print_log("Seed Time Tree tMRCA: %s" % args.time_tree_tmrca)
     print_log()
+    print_log("=== Mutation Tree Arguments ===")
+    print_log("Seed Mutation Tree: %s" % args.mutation_tree_seed)
+    print_log()
     print_log("=== CoaTran (Constant) Progress ===")
-    if args.time_tree_seed.lower().endswith('.nexus') or args.time_tree_seed.lower().endswith('.nex'):
-        time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nex' % args.output
-    else:
-        time_tree_seed_copy_fn = '%s/inputs/time_tree_seed.nwk' % args.output
-    f = open(time_tree_seed_copy_fn, 'w'); f.write(open(args.time_tree_seed).read()); f.close()
+    for input_tree_fn, copy_fn_prefix in [(args.time_tree_seed, 'time_tree_seed'), (args.mutation_tree_seed, 'mutation_tree_seed')]:
+        if input_tree_fn.split('.')[-1].strip().lower() in {'nexus', 'nex'}:
+            copy_fn_ext = 'nex'
+        else:
+            copy_fn_ext = 'nwk'
+        copy_fn = '%s/inputs/%s.%s' % (args.output, copy_fn_prefix, copy_fn_ext)
+        f = open(copy_fn, 'w'); f.write(open(input_tree_fn).read()); f.close()
     with catch_warnings():
         simplefilter("ignore")
         time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
     print_log("Time tree written to: %s" % time_tree_fn)
-    print_log()
-    print_log("=== Mutation Tree Arguments ===")
-    print_log("Seed Mutation Tree: %s" % args.mutation_tree_seed)
     print_log()
     print_log("=== Mutation Tree Progress ===")
     mut_tree_fn = scale_tree(args.output, time_tree_fn, args.time_tree_seed, args.mutation_tree_seed)
