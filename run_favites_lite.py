@@ -20,7 +20,7 @@ from warnings import catch_warnings, simplefilter
 import argparse
 
 # useful constants
-VERSION = '0.0.1'
+VERSION = '0.0.2'
 LOGFILE = None
 SAMPLE_TIME_PROB_COLUMNS = ['gender', 'risk', 'race', 'agerange', 'timetype', 'probability']
 AGE_RANGES = ['0-24', '25-54', '55-999']
