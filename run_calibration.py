@@ -9,7 +9,6 @@ from os.path import abspath, expanduser, isdir, isfile
 from random import randint, seed
 from scipy.optimize import minimize
 from shutil import make_archive, rmtree
-from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -237,7 +236,7 @@ def run_calibration(
             error_message = "All simulation replicates crashed in FAVITES iteration %d" % iter_num
             print_log(error_message)
             raise RuntimeError(error_message)
-        score = mean(float(open(fn).read().split()[-1]) for fn in glob('%s/*/score.txt' % curr_outdir))
+        score = min(float(open(fn).read().split()[-1]) for fn in glob('%s/*/score.txt' % curr_outdir))
         print_log("FAVITES iteration %d average score: %s" % (iter_num, score))
         if zip_output:
             print_log("Zipping output..."); make_archive(curr_outdir, 'zip', curr_outdir); rmtree(curr_outdir)
