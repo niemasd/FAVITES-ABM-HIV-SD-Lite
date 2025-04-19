@@ -19,6 +19,7 @@ import argparse
 LOGFILE = None
 DEFAULT_FN_LOG = "log_favites_calibration.txt"
 MAX_RNG_SEED = 2147483647
+SCIPY_MINIMIZE_METHODS = {'Nelder-Mead', 'L-BFGS-B', 'TNC', 'SLSQP', 'Powell', 'trust-constr', 'COBYLA', 'COBYQA'}
 
 # return the current time as a string
 def get_time():
@@ -50,6 +51,7 @@ def parse_args():
     parser.add_argument('--time_tree_seed', required=True, type=str, help="Time Tree: Seed (Newick/Nexus File)")
     parser.add_argument('--time_tree_tmrca', required=True, type=float, help="Time Tree: Time of Most Recent Common Ancestor (tMRCA; time of root of seed time tree; year)")
     parser.add_argument('--time_tree_only_include_mapped', action='store_true', help="Time Tree: Only Include Individuals in ABM Map in Seed Tree")
+    parser.add_argument('--scipy_minimize_method', required=False, type=str, default='Powell', help="SciPy Minimize Optimization Method (options: %s)" % ', '.join(sorted(SCIPY_MINIMIZE_METHODS)))
     parser.add_argument('--num_reps_per_score', required=False, type=int, default=5, help="Number of replicates to run per scoring of a parameter set")
     parser.add_argument('--max_num_threads', required=False, type=int, default=cpu_count(), help="Max number of threads to use")
     parser.add_argument('--zip_output', action='store_true', help="Gzip Compress Output Files")
@@ -68,6 +70,7 @@ def parse_args():
     args.time_tree_seed = abspath(expanduser(args.time_tree_seed))
     args.path_abm_hiv_commandline = abspath(expanduser(args.path_abm_hiv_commandline))
     args.path_abm_hiv_modules = abspath(expanduser(args.path_abm_hiv_modules))
+    args.scipy_minimize_method = args.scipy_minimize_method.strip()
 
     # check input files and return
     for fn in [args.calibration_csv, args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.sample_time_probs_csv, args.time_tree_seed]:
@@ -89,6 +92,10 @@ def check_args(args):
     if not isfile(args.calibration_csv):
         raise ValueError("Calibration CSV not found: %s" % args.calibration_csv)
 
+    # check scipy.minimize optimization method
+    if args.scipy_minimize_method not in SCIPY_MINIMIZE_METHODS:
+        raise ValueError("Invalid scipy.minimize method (%s). Options: %s" % (args.scipy_minimize_method, ', '.join(sorted(SCIPY_MINIMIZE_METHODS))))
+
     # check num reps per score
     if args.num_reps_per_score < 1:
         raise ValueError("Number of replicates per scoring must be at least 1: %s" % args.num_reps_per_score)
@@ -103,6 +110,7 @@ def run_calibration(
         abm_hiv_params_xlsx, abm_hiv_sd_demographics_csv, abm_hiv_trans_start, abm_hiv_trans_end, abm_hiv_trans_time,
         sample_time_probs_csv, coatran_eff_pop_size, time_tree_seed, time_tree_tmrca, time_tree_only_include_mapped,
         mutation_tree_seed,
+        scipy_minimize_method, # options in `SCIPY_MINIMIZE_METHODS`
         num_reps_per_score, max_num_threads,
         calibration_mode, # "epi" or "epi+genetic"
         path_abm_hiv_commandline=DEFAULT_PATH_ABM_HIV_COMMANDLINE, path_abm_hiv_modules=DEFAULT_PATH_ABM_HIV_MODULES, path_coatran_constant=DEFAULT_PATH_COATRAN_CONSTANT,
@@ -236,7 +244,7 @@ def run_calibration(
         return score
 
     # run calibration
-    minimize(opt_func, x0, bounds=bounds)
+    minimize(opt_func, x0, bounds=bounds, method=scipy_minimize_method)
 
 # main execution
 if __name__ == "__main__":
@@ -259,6 +267,7 @@ if __name__ == "__main__":
         args.abm_hiv_params_xlsx, args.abm_hiv_sd_demographics_csv, args.abm_hiv_trans_start, args.abm_hiv_trans_end, args.abm_hiv_trans_time,
         args.sample_time_probs_csv, args.coatran_eff_pop_size, args.time_tree_seed, args.time_tree_tmrca, args.time_tree_only_include_mapped,
         args.mutation_tree_seed,
+        args.scipy_minimize_method,
         args.num_reps_per_score, args.max_num_threads,
         args.calibration_mode.lower().strip(),
         args.path_abm_hiv_commandline, args.path_abm_hiv_modules, args.path_coatran_constant,
