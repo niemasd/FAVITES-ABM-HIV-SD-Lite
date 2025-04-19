@@ -250,12 +250,18 @@ if __name__ == "__main__":
     # parse/check user args and set things up
     args = parse_args(); check_args(args)
     makedirs(args.output, exist_ok=True)
+    makedirs('%s/inputs' % args.output, exist_ok=True)
     LOGFILE_fn = "%s/%s" % (args.output, DEFAULT_FN_LOG)
     LOGFILE = open(LOGFILE_fn, 'w')
 
     # print run info to log
     print_log("===== RUN INFORMATION =====")
     print_log("Calibration command: %s" % ' '.join(argv))
+    print_log("Calibration CSV: %s" % args.calibration_csv)
+    print_log("Original abm_hiv-HRSA_SD Parameter XLSX: %s" % args.abm_hiv_params_xlsx)
+    for input_fn, copy_name in [(args.calibration_csv, 'calibration.csv'), (args.abm_hiv_params_xlsx, 'data.xlsx')]:
+        copy_fn = '%s/inputs/%s' % (args.output, copy_name)
+        f = open(copy_fn, 'w'); f.write(open(input_fn).read()); f.close()
     print_log(); print_log()
 
     # run calibration
