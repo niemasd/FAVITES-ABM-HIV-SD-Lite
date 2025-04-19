@@ -266,6 +266,7 @@ if __name__ == "__main__":
 
     # run calibration
     print_log("===== CALIBRATION =====")
+    print_log("SciPy Optimize Calibration Method: %s" % args.scipy_minimize_method)
     print_log("Running calibration...")
     run_calibration(
         args.calibration_csv, args.output, args.sim_start_time,
