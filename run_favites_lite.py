@@ -671,6 +671,7 @@ if __name__ == "__main__":
     print_log("Seed Mutation Tree: %s" % args.mutation_tree_seed)
     print_log()
     print_log("=== CoaTran (Constant) Progress ===")
+    copy_fns = list()
     for input_tree_fn, copy_fn_prefix in [(args.time_tree_seed, 'time_tree_seed'), (args.mutation_tree_seed, 'mutation_tree_seed')]:
         if input_tree_fn.split('.')[-1].strip().lower() in {'nexus', 'nex'}:
             copy_fn_ext = 'nex'
@@ -678,6 +679,8 @@ if __name__ == "__main__":
             copy_fn_ext = 'nwk'
         copy_fn = '%s/inputs/%s.%s' % (args.output, copy_fn_prefix, copy_fn_ext)
         copy(input_tree_fn, copy_fn)
+        copy_fns.append(copy_fn)
+    time_tree_seed_copy_fn = copy_fns[0]
     with catch_warnings():
         simplefilter("ignore")
         time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
