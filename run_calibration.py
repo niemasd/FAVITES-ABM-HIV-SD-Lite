@@ -8,7 +8,7 @@ from os import chdir, cpu_count, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import randint, seed
 from scipy.optimize import minimize
-from shutil import make_archive, rmtree
+from shutil import copy, make_archive, rmtree
 from subprocess import check_output
 from sys import argv, stdout
 from zipfile import ZIP_DEFLATED, ZipFile
@@ -261,7 +261,7 @@ if __name__ == "__main__":
     print_log("Original abm_hiv-HRSA_SD Parameter XLSX: %s" % args.abm_hiv_params_xlsx)
     for input_fn, copy_name in [(args.calibration_csv, 'calibration.csv'), (args.abm_hiv_params_xlsx, 'data.xlsx')]:
         copy_fn = '%s/inputs/%s' % (args.output, copy_name)
-        f = open(copy_fn, 'w'); f.write(open(input_fn).read()); f.close()
+        copy(input_fn, copy_fn)
     print_log(); print_log()
 
     # run calibration
