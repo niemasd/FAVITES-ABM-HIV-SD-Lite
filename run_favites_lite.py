@@ -10,6 +10,7 @@ from os import chdir, getcwd, makedirs
 from os.path import abspath, expanduser, isdir, isfile
 from random import random
 from scipy.stats import gaussian_kde, truncexpon
+from shutil import copy
 from statistics import mean
 from subprocess import check_output
 from sys import argv, stdout
@@ -594,7 +595,7 @@ if __name__ == "__main__":
     print_log("abm_hiv-HRSA_SD: Time (months) to Go from Starting to Ending Transition Rate: %s" % args.abm_hiv_trans_time)
     print_log("Loading Sample Time Probabilities (CSV): %s" % args.sample_time_probs_csv)
     probs_csv_copy_fn = '%s/inputs/sample_time_probs.csv' % args.output
-    f = open(probs_csv_copy_fn, 'w'); f.write(open(args.sample_time_probs_csv).read()); f.close()
+    copy(args.sample_time_probs_csv, probs_csv_copy_fn)
     probs = load_sample_time_probs(probs_csv_copy_fn)
     print_log()
     print_log("=== abm_hiv-HRSA_SD Progress ===")
@@ -643,7 +644,7 @@ if __name__ == "__main__":
 
     # run ABM R code
     dem_csv_copy_fn = '%s/inputs/demographics.csv' % args.output
-    f = open(dem_csv_copy_fn, 'w'); f.write(open(args.abm_hiv_sd_demographics_csv).read()); f.close()
+    copy(args.abm_hiv_sd_demographics_csv, dem_csv_copy_fn)
     sim_duration, calibration_fn, transmission_fn, all_times_fn, demographic_fn, id_map_fn = run_abm_hiv_hrsa_sd(
         args.output,                   # FAVITES-ABM-HIV-SD-Lite output directory
         data_xlsx_copy_fn,             # parameter XLSX file
@@ -676,7 +677,7 @@ if __name__ == "__main__":
         else:
             copy_fn_ext = 'nwk'
         copy_fn = '%s/inputs/%s.%s' % (args.output, copy_fn_prefix, copy_fn_ext)
-        f = open(copy_fn, 'w'); f.write(open(input_tree_fn).read()); f.close()
+        copy(input_tree_fn, copy_fn)
     with catch_warnings():
         simplefilter("ignore")
         time_tree_fn = sample_time_tree(args.output, transmission_fn, sample_times_fn, id_map_fn, args.coatran_eff_pop_size, time_tree_seed_copy_fn, args.time_tree_tmrca, args.sim_start_time, merge_model='yule', only_include_mapped=args.time_tree_only_include_mapped, path_coatran_constant=args.path_coatran_constant)
