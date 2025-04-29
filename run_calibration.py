@@ -237,7 +237,7 @@ def run_calibration(
             print_log(error_message)
             raise RuntimeError(error_message)
         score = min(float(open(fn).read().split()[-1]) for fn in glob('%s/*/score.txt' % curr_outdir))
-        print_log("FAVITES iteration %d average score: %s" % (iter_num, score))
+        print_log("FAVITES iteration %d overall score: %s" % (iter_num, score))
         if zip_output:
             print_log("Zipping output..."); make_archive(curr_outdir, 'zip', curr_outdir); rmtree(curr_outdir)
         return score
