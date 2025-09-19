@@ -156,10 +156,20 @@ def run_calibration(
             bounds.append((0, 1))
             override_cli_args.append('--abm_xlsx_het_assortativity_risk')
 
+            # heterosexual assortativity (race)
+            x0.append(0.5)
+            bounds.append((0, 1))
+            override_cli_args.append('--abm_xlsx_het_assortativity_race')
+
             # MSM assortativity (risk)
             x0.append(0.2)
             bounds.append((0, 1))
             override_cli_args.append('--abm_xlsx_msm_assortativity_risk')
+
+            # MSM assortativity (race)
+            x0.append(0.5)
+            bounds.append((0, 1))
+            override_cli_args.append('--abm_xlsx_msm_assortativity_race')
 
             # MSMW percentage of MSM who are MSMW
             x0.append(0)

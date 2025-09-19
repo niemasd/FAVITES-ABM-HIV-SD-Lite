@@ -182,9 +182,11 @@ def parse_args():
     parser.add_argument('--abm_xlsx_idu_injections_per_month', required=False, type=float, default=None, help="Override ABM XLSX IDU Injections Per Month")
     parser.add_argument('--abm_xlsx_het_partners_per_person_per_month', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Partners Per Person Per Month")
     parser.add_argument('--abm_xlsx_het_assortativity_risk', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Assortativity (Risk)")
+    parser.add_argument('--abm_xlsx_het_assortativity_race', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Assortativity (Race)")
     parser.add_argument('--abm_xlsx_het_assortativity_hiv_status', required=False, type=float, default=None, help="Override ABM XLSX Heterosexual Assortativity (HIV Status)")
     parser.add_argument('--abm_xlsx_msm_partners_per_person_per_month', required=False, type=float, default=None, help="Override ABM XLSX MSM Partners Per Person Per Month")
     parser.add_argument('--abm_xlsx_msm_assortativity_risk', required=False, type=float, default=None, help="Override ABM XLSX MSM Assortativity (Risk)")
+    parser.add_argument('--abm_xlsx_msm_assortativity_race', required=False, type=float, default=None, help="Override ABM XLSX MSM Assortativity (Race)")
     parser.add_argument('--abm_xlsx_msm_assortativity_hiv_status', required=False, type=float, default=None, help="Override ABM XLSX MSM Assortativity (HIV Status)")
     parser.add_argument('--abm_xlsx_msm_hiv_monthly_transmission_prob_mult', required=False, type=float, default=None, help="Override ABM XLSX MSM HIV Monthly Transmission Probability Between Pairs Multiplier")
     parser.add_argument('--abm_xlsx_msmw_percentage_msm_msmw', required=False, type=float, default=None, help="Override ABM XLSX MSMW Percentage of MSM who are MSMW")
@@ -615,6 +617,9 @@ if __name__ == "__main__":
     if args.abm_xlsx_het_assortativity_risk is not None:
         print_log("Overriding ABM Heterosexual Assortativity (Risk): %s" % args.abm_xlsx_het_assortativity_risk)
         wb['Transmission + At-Risk Features']['D17'] = args.abm_xlsx_het_assortativity_risk
+    if args.abm_xlsx_het_assortativity_race is not None:
+        print_log("Overriding ABM Heterosexual Assortativity (Race): %s" % args.abm_xlsx_het_assortativity_race)
+        wb['Transmission + At-Risk Features']['D19'] = args.abm_xlsx_het_assortativity_race
     if args.abm_xlsx_het_assortativity_hiv_status is not None:
         print_log("Overriding ABM Heterosexual Assortativity (HIV Status): %s" % args.abm_xlsx_het_assortativity_hiv_status)
         wb['Transmission + At-Risk Features']['D18'] = args.abm_xlsx_het_assortativity_hiv_status
@@ -624,6 +629,9 @@ if __name__ == "__main__":
     if args.abm_xlsx_msm_assortativity_risk is not None:
         print_log("Overriding ABM MSM Assortativity (Risk): %s" % args.abm_xlsx_msm_assortativity_risk)
         wb['Transmission + At-Risk Features']['D34'] = args.abm_xlsx_msm_assortativity_risk
+    if args.abm_xlsx_msm_assortativity_race is not None:
+        print_log("Overriding ABM MSM Assortativity (Race): %s" % args.abm_xlsx_msm_assortativity_race)
+        wb['Transmission + At-Risk Features']['D36'] = args.abm_xlsx_msm_assortativity_race
     if args.abm_xlsx_msm_assortativity_hiv_status is not None:
         print_log("Overriding ABM MSM Assortativity (HIV Status): %s" % args.abm_xlsx_msm_assortativity_hiv_status)
         wb['Transmission + At-Risk Features']['D35'] = args.abm_xlsx_msm_assortativity_hiv_status
