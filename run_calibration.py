@@ -120,10 +120,10 @@ def run_calibration(
     calibration_mode_parts = set(calibration_mode.lower().split('+'))
     x0 = list(); bounds = list(); override_cli_args = list()
     if 'epi' in calibration_mode_parts:
-        # IDU injections per month
-        x0.append(0.05)
-        bounds.append((0, 1))
-        override_cli_args.append('--abm_xlsx_idu_injections_per_month')
+        # IDU injections per month (we're skipping for now, as of 2026-04-14 meeting)
+        #x0.append(0.05)
+        #bounds.append((0, 1))
+        #override_cli_args.append('--abm_xlsx_idu_injections_per_month')
 
         # heterosexual partners per person per month
         x0.append(1.1)
